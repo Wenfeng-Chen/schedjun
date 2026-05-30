@@ -1,18 +1,16 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Dimensions, PanResponder, StyleSheet, View } from 'react-native';
-import Animated, { SlideInLeft, SlideInRight } from 'react-native-reanimated';
+import { useCallback, useMemo, useState } from 'react';
+import { Dimensions, StyleSheet, View } from 'react-native';
 
 import { colors, radius, spacing } from '../../constants/theme';
 import {
-  MonthRef,
   addMonths,
   createMonthRef,
   isSameDay,
   monthDiff,
 } from '../../utils/calendarUtils';
-import CalendarGrid from './CalendarGrid';
 import CalendarHeader from './CalendarHeader';
 import CalendarMenu from './CalendarMenu';
+import CalendarMonthPager from './CalendarMonthPager';
 import DateJumpModal from './DateJumpModal';
 import JumpToTodayButton from './JumpToTodayButton';
 import SelectedDayDetail from './SelectedDayDetail';
@@ -20,6 +18,11 @@ import SelectedDayDetail from './SelectedDayDetail';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HORIZONTAL = spacing.lg;
 const PAGE_WIDTH = SCREEN_WIDTH - CARD_HORIZONTAL * 2;
+
+interface CalendarPageState {
+  monthOffset: number;
+  selectedDate: Date;
+}
 
 interface CalendarViewProps {
   onAddPress?: (selectedDate: Date) => void;
@@ -33,64 +36,53 @@ export default function CalendarView({ onAddPress, onMySchedulePress }: Calendar
   }, []);
 
   const baseMonth = useMemo(() => createMonthRef(today), [today]);
-  const [monthOffset, setMonthOffset] = useState(0);
-  const [selectedDate, setSelectedDate] = useState<Date>(today);
+  const [pageState, setPageState] = useState<CalendarPageState>({
+    monthOffset: 0,
+    selectedDate: today,
+  });
+  const { monthOffset, selectedDate } = pageState;
+  const [headerMonthOffset, setHeaderMonthOffset] = useState(0);
   const [menuVisible, setMenuVisible] = useState(false);
   const [dateJumpVisible, setDateJumpVisible] = useState(false);
-  const slideDirection = useRef(1);
 
   const visibleMonth = useMemo(
-    () => addMonths(baseMonth, monthOffset),
-    [baseMonth, monthOffset],
+    () => addMonths(baseMonth, headerMonthOffset),
+    [baseMonth, headerMonthOffset],
   );
 
-  const changeMonth = useCallback(
+  const handleSwipeMonthStart = useCallback((delta: number) => {
+    setHeaderMonthOffset((offset) => offset + delta);
+  }, []);
+
+  const handleSwipeMonthComplete = useCallback(
     (delta: number) => {
-      slideDirection.current = delta;
-      setMonthOffset((offset) => {
-        const newOffset = offset + delta;
+      setPageState((prev) => {
+        const newOffset = prev.monthOffset + delta;
         const newMonth = addMonths(baseMonth, newOffset);
-        setSelectedDate(new Date(newMonth.year, newMonth.month, 1));
-        return newOffset;
+        return {
+          monthOffset: newOffset,
+          selectedDate: new Date(newMonth.year, newMonth.month, 1),
+        };
       });
     },
     [baseMonth],
   );
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gesture) =>
-        Math.abs(gesture.dx) > Math.abs(gesture.dy) && Math.abs(gesture.dx) > 12,
-      onPanResponderRelease: (_, gesture) => {
-        if (gesture.dx < -40) {
-          changeMonth(1);
-        } else if (gesture.dx > 40) {
-          changeMonth(-1);
-        }
-      },
-    }),
-  ).current;
-
   const handleSelectDate = useCallback(
     (date: Date) => {
       const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-      setSelectedDate(normalized);
-
       const monthRef = createMonthRef(normalized);
       const diff = monthDiff(monthRef, baseMonth);
-      if (diff !== monthOffset) {
-        slideDirection.current = diff > monthOffset ? 1 : -1;
-        setMonthOffset(diff);
-      }
+
+      setHeaderMonthOffset(diff);
+      setPageState({
+        monthOffset: diff,
+        selectedDate: normalized,
+      });
     },
-    [baseMonth, monthOffset],
+    [baseMonth],
   );
 
-  const monthKey = `${visibleMonth.year}-${visibleMonth.month}`;
-  const entering =
-    slideDirection.current > 0
-      ? SlideInRight.duration(260)
-      : SlideInLeft.duration(260);
   const showJumpToToday = !isSameDay(selectedDate, today);
 
   const handleJumpToToday = useCallback(() => {
@@ -107,27 +99,27 @@ export default function CalendarView({ onAddPress, onMySchedulePress }: Calendar
           onMenuPress={() => setMenuVisible(true)}
         />
 
-        <View style={styles.calendarBody} {...panResponder.panHandlers}>
-          <Animated.View key={monthKey} entering={entering}>
-            <CalendarGrid
-              monthRef={visibleMonth}
-              today={today}
-              selectedDate={selectedDate}
-              onSelectDate={handleSelectDate}
-              gridWidth={PAGE_WIDTH}
-              monthKey={monthKey}
-            />
-          </Animated.View>
+        <View style={styles.calendarBody}>
+          <CalendarMonthPager
+            baseMonth={baseMonth}
+            monthOffset={monthOffset}
+            today={today}
+            selectedDate={selectedDate}
+            pageWidth={PAGE_WIDTH}
+            onSelectDate={handleSelectDate}
+            onSwipeMonthStart={handleSwipeMonthStart}
+            onSwipeMonthComplete={handleSwipeMonthComplete}
+          />
         </View>
       </View>
 
-      {showJumpToToday && (
+      <View style={styles.belowCalendar}>
         <View style={styles.jumpToTodayRow}>
-          <JumpToTodayButton onPress={handleJumpToToday} />
+          {showJumpToToday && <JumpToTodayButton onPress={handleJumpToToday} />}
         </View>
-      )}
 
-      <SelectedDayDetail selectedDate={selectedDate} compactTop={showJumpToToday} />
+        <SelectedDayDetail selectedDate={selectedDate} />
+      </View>
 
       <CalendarMenu
         visible={menuVisible}
@@ -165,11 +157,14 @@ const styles = StyleSheet.create({
   calendarBody: {
     width: PAGE_WIDTH,
   },
+  belowCalendar: {
+    marginTop: spacing.xs,
+  },
   jumpToTodayRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
+    alignItems: 'center',
+    height: 36,
     paddingRight: spacing.xs,
   },
 });

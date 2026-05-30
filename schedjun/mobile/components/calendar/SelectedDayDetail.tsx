@@ -1,25 +1,18 @@
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { fonts } from '../../constants/fonts';
 import { colors, radius, spacing } from '../../constants/theme';
-import { formatDayKey, formatSelectedDate } from '../../utils/calendarUtils';
+import { formatSelectedDate } from '../../utils/calendarUtils';
 
 interface SelectedDayDetailProps {
   selectedDate: Date;
-  compactTop?: boolean;
 }
 
-export default function SelectedDayDetail({ selectedDate, compactTop = false }: SelectedDayDetailProps) {
+export default function SelectedDayDetail({ selectedDate }: SelectedDayDetailProps) {
   const formatted = formatSelectedDate(selectedDate);
-  const detailKey = formatDayKey(selectedDate);
 
   return (
-    <Animated.View
-      key={detailKey}
-      entering={FadeIn.duration(200)}
-      style={[styles.container, compactTop && styles.containerCompactTop]}
-    >
+    <View style={styles.container}>
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.mainDate}>{formatted.main}</Text>
@@ -33,17 +26,13 @@ export default function SelectedDayDetail({ selectedDate, compactTop = false }: 
         <Text style={styles.emptyTitle}>暂无日程</Text>
         <Text style={styles.emptyHint}>语音添加后将显示在这里</Text>
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: spacing.lg,
     paddingHorizontal: spacing.xs,
-  },
-  containerCompactTop: {
-    marginTop: spacing.sm,
   },
   headerRow: {
     flexDirection: 'row',
