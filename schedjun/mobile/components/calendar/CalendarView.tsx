@@ -18,7 +18,11 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HORIZONTAL = spacing.lg;
 const PAGE_WIDTH = SCREEN_WIDTH - CARD_HORIZONTAL * 2;
 
-export default function CalendarView() {
+interface CalendarViewProps {
+  onAddPress?: (selectedDate: Date) => void;
+}
+
+export default function CalendarView({ onAddPress }: CalendarViewProps) {
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -81,7 +85,7 @@ export default function CalendarView() {
         <CalendarHeader
           monthRef={visibleMonth}
           today={today}
-          onAddPress={() => undefined}
+          onAddPress={() => onAddPress?.(selectedDate)}
           onMenuPress={() => setMenuVisible(true)}
         />
 
