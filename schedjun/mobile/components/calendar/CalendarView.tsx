@@ -12,6 +12,7 @@ import {
 import CalendarGrid from './CalendarGrid';
 import CalendarHeader from './CalendarHeader';
 import CalendarMenu from './CalendarMenu';
+import DateJumpModal from './DateJumpModal';
 import SelectedDayDetail from './SelectedDayDetail';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -33,6 +34,7 @@ export default function CalendarView({ onAddPress, onMySchedulePress }: Calendar
   const [monthOffset, setMonthOffset] = useState(0);
   const [selectedDate, setSelectedDate] = useState<Date>(today);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [dateJumpVisible, setDateJumpVisible] = useState(false);
   const slideDirection = useRef(1);
 
   const visibleMonth = useMemo(
@@ -110,6 +112,14 @@ export default function CalendarView({ onAddPress, onMySchedulePress }: Calendar
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
         onMySchedulePress={onMySchedulePress}
+        onDateJumpPress={() => setDateJumpVisible(true)}
+      />
+
+      <DateJumpModal
+        visible={dateJumpVisible}
+        value={selectedDate}
+        onClose={() => setDateJumpVisible(false)}
+        onConfirm={handleSelectDate}
       />
     </View>
   );
