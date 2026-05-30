@@ -7,20 +7,35 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import CalendarView from './components/calendar/CalendarView';
 import CreateEventScreen, { EventFormData } from './components/event/CreateEventScreen';
+import EditEventScreen, { EditEventFormData } from './components/event/EditEventScreen';
 import MyScheduleScreen from './components/schedule/MyScheduleScreen';
+import ScheduleDetailScreen from './components/schedule/ScheduleDetailScreen';
+import { MOCK_SCHEDULES } from './constants/mockSchedules';
+import { ScheduleItem } from './constants/scheduleTypes';
 import { colors } from './constants/theme';
+import { formDataToSchedule, scheduleToFormData } from './utils/scheduleDetailUtils';
 
-type AppScreen = 'home' | 'createEvent' | 'mySchedule';
+type AppScreen = 'home' | 'createEvent' | 'mySchedule' | 'editEvent';
 
 export default function App() {
   const [screen, setScreen] = useState<AppScreen>('home');
   const [createEventDate, setCreateEventDate] = useState<Date>(() => new Date());
+  const [schedules, setSchedules] = useState<ScheduleItem[]>(() =>
+    MOCK_SCHEDULES.map((item) => ({
+      ...item,
+      startTime: new Date(item.startTime),
+      endTime: new Date(item.endTime),
+    })),
+  );
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [returnScreen, setReturnScreen] = useState<AppScreen>('home');
 
   const [fontsLoaded] = useFonts({
     NotoSerifSC_700Bold,
@@ -28,6 +43,16 @@ export default function App() {
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
   });
+
+  const selectedSchedule = useMemo(
+    () => schedules.find((item) => item.id === selectedScheduleId) ?? null,
+    [schedules, selectedScheduleId],
+  );
+
+  const editingSchedule = useMemo(
+    () => schedules.find((item) => item.id === editingScheduleId) ?? null,
+    [schedules, editingScheduleId],
+  );
 
   const handleAddPress = (selectedDate: Date) => {
     setCreateEventDate(selectedDate);
@@ -37,6 +62,52 @@ export default function App() {
   const handleSaveEvent = (_data: EventFormData) => {
     // 后续 PR 接入日程存储
   };
+
+  const openScheduleDetail = useCallback((scheduleId: string) => {
+    setSelectedScheduleId(scheduleId);
+  }, []);
+
+  const closeScheduleDetail = useCallback(() => {
+    setSelectedScheduleId(null);
+  }, []);
+
+  const openScheduleEdit = useCallback(() => {
+    if (!selectedScheduleId) {
+      return;
+    }
+    setReturnScreen(screen);
+    setEditingScheduleId(selectedScheduleId);
+    setScreen('editEvent');
+  }, [selectedScheduleId, screen]);
+
+  const handleDeleteSchedule = useCallback(() => {
+    if (!selectedScheduleId) {
+      return;
+    }
+    setSchedules((prev) => prev.filter((item) => item.id !== selectedScheduleId));
+    setSelectedScheduleId(null);
+  }, [selectedScheduleId]);
+
+  const handleSaveEdit = useCallback(
+    (data: EditEventFormData) => {
+      if (!editingScheduleId) {
+        return;
+      }
+      setSchedules((prev) =>
+        prev.map((item) =>
+          item.id === editingScheduleId ? formDataToSchedule(editingScheduleId, data) : item,
+        ),
+      );
+      setScreen(returnScreen);
+      setEditingScheduleId(null);
+    },
+    [editingScheduleId, returnScreen],
+  );
+
+  const handleCloseEdit = useCallback(() => {
+    setEditingScheduleId(null);
+    setScreen(returnScreen);
+  }, [returnScreen]);
 
   if (!fontsLoaded) {
     return (
@@ -59,11 +130,37 @@ export default function App() {
     );
   }
 
+  if (screen === 'editEvent' && editingSchedule) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <EditEventScreen
+          initialData={scheduleToFormData(editingSchedule)}
+          onClose={handleCloseEdit}
+          onSave={handleSaveEdit}
+        />
+      </SafeAreaProvider>
+    );
+  }
+
   if (screen === 'mySchedule') {
     return (
       <SafeAreaProvider>
         <StatusBar style="dark" />
-        <MyScheduleScreen onBack={() => setScreen('home')} />
+        <MyScheduleScreen
+          schedules={schedules}
+          onSchedulesChange={setSchedules}
+          onBack={() => setScreen('home')}
+          onSchedulePress={openScheduleDetail}
+        />
+        {selectedSchedule && (
+          <ScheduleDetailScreen
+            schedule={selectedSchedule}
+            onClose={closeScheduleDetail}
+            onEdit={openScheduleEdit}
+            onDelete={handleDeleteSchedule}
+          />
+        )}
       </SafeAreaProvider>
     );
   }
@@ -83,12 +180,23 @@ export default function App() {
             contentContainerStyle={styles.scrollContent}
           >
             <CalendarView
+              schedules={schedules}
               onAddPress={handleAddPress}
               onMySchedulePress={() => setScreen('mySchedule')}
+              onSchedulePress={openScheduleDetail}
             />
           </ScrollView>
         </SafeAreaView>
       </LinearGradient>
+
+      {selectedSchedule && screen === 'home' && (
+        <ScheduleDetailScreen
+          schedule={selectedSchedule}
+          onClose={closeScheduleDetail}
+          onEdit={openScheduleEdit}
+          onDelete={handleDeleteSchedule}
+        />
+      )}
     </SafeAreaProvider>
   );
 }
