@@ -3,20 +3,23 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { fonts } from '../../constants/fonts';
 import { colors, radius, spacing } from '../../constants/theme';
-import { formatDayKey, formatSelectedDate, isSameDay } from '../../utils/calendarUtils';
+import { formatDayKey, formatSelectedDate } from '../../utils/calendarUtils';
 
 interface SelectedDayDetailProps {
   selectedDate: Date;
-  today: Date;
+  compactTop?: boolean;
 }
 
-export default function SelectedDayDetail({ selectedDate, today }: SelectedDayDetailProps) {
+export default function SelectedDayDetail({ selectedDate, compactTop = false }: SelectedDayDetailProps) {
   const formatted = formatSelectedDate(selectedDate);
-  const isToday = isSameDay(selectedDate, today);
   const detailKey = formatDayKey(selectedDate);
 
   return (
-    <Animated.View key={detailKey} entering={FadeIn.duration(200)} style={styles.container}>
+    <Animated.View
+      key={detailKey}
+      entering={FadeIn.duration(200)}
+      style={[styles.container, compactTop && styles.containerCompactTop]}
+    >
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.mainDate}>{formatted.main}</Text>
@@ -24,11 +27,6 @@ export default function SelectedDayDetail({ selectedDate, today }: SelectedDayDe
             {formatted.weekday} · {formatted.year}
           </Text>
         </View>
-        {isToday && (
-          <View style={styles.todayBadge}>
-            <Text style={styles.todayBadgeText}>今天</Text>
-          </View>
-        )}
       </View>
 
       <View style={styles.emptyCard}>
@@ -43,6 +41,9 @@ const styles = StyleSheet.create({
   container: {
     marginTop: spacing.lg,
     paddingHorizontal: spacing.xs,
+  },
+  containerCompactTop: {
+    marginTop: spacing.sm,
   },
   headerRow: {
     flexDirection: 'row',
@@ -61,17 +62,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 14,
     color: colors.textSecondary,
-  },
-  todayBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.full,
-    backgroundColor: colors.primaryLight,
-  },
-  todayBadgeText: {
-    fontFamily: fonts.bodySemiBold,
-    fontSize: 12,
-    color: colors.primaryDark,
   },
   emptyCard: {
     backgroundColor: colors.surface,

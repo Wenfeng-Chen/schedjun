@@ -7,12 +7,14 @@ import {
   MonthRef,
   addMonths,
   createMonthRef,
+  isSameDay,
   monthDiff,
 } from '../../utils/calendarUtils';
 import CalendarGrid from './CalendarGrid';
 import CalendarHeader from './CalendarHeader';
 import CalendarMenu from './CalendarMenu';
 import DateJumpModal from './DateJumpModal';
+import JumpToTodayButton from './JumpToTodayButton';
 import SelectedDayDetail from './SelectedDayDetail';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -42,10 +44,18 @@ export default function CalendarView({ onAddPress, onMySchedulePress }: Calendar
     [baseMonth, monthOffset],
   );
 
-  const changeMonth = useCallback((delta: number) => {
-    slideDirection.current = delta;
-    setMonthOffset((offset) => offset + delta);
-  }, []);
+  const changeMonth = useCallback(
+    (delta: number) => {
+      slideDirection.current = delta;
+      setMonthOffset((offset) => {
+        const newOffset = offset + delta;
+        const newMonth = addMonths(baseMonth, newOffset);
+        setSelectedDate(new Date(newMonth.year, newMonth.month, 1));
+        return newOffset;
+      });
+    },
+    [baseMonth],
+  );
 
   const panResponder = useRef(
     PanResponder.create({
@@ -81,6 +91,11 @@ export default function CalendarView({ onAddPress, onMySchedulePress }: Calendar
     slideDirection.current > 0
       ? SlideInRight.duration(260)
       : SlideInLeft.duration(260);
+  const showJumpToToday = !isSameDay(selectedDate, today);
+
+  const handleJumpToToday = useCallback(() => {
+    handleSelectDate(today);
+  }, [handleSelectDate, today]);
 
   return (
     <View style={styles.container}>
@@ -106,7 +121,13 @@ export default function CalendarView({ onAddPress, onMySchedulePress }: Calendar
         </View>
       </View>
 
-      <SelectedDayDetail selectedDate={selectedDate} today={today} />
+      {showJumpToToday && (
+        <View style={styles.jumpToTodayRow}>
+          <JumpToTodayButton onPress={handleJumpToToday} />
+        </View>
+      )}
+
+      <SelectedDayDetail selectedDate={selectedDate} compactTop={showJumpToToday} />
 
       <CalendarMenu
         visible={menuVisible}
@@ -143,5 +164,12 @@ const styles = StyleSheet.create({
   },
   calendarBody: {
     width: PAGE_WIDTH,
+  },
+  jumpToTodayRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    paddingRight: spacing.xs,
   },
 });
