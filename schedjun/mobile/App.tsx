@@ -13,9 +13,10 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import CalendarView from './components/calendar/CalendarView';
 import CreateEventScreen, { EventFormData } from './components/event/CreateEventScreen';
+import MyScheduleScreen from './components/schedule/MyScheduleScreen';
 import { colors } from './constants/theme';
 
-type AppScreen = 'home' | 'createEvent';
+type AppScreen = 'home' | 'createEvent' | 'mySchedule';
 
 export default function App() {
   const [screen, setScreen] = useState<AppScreen>('home');
@@ -58,6 +59,15 @@ export default function App() {
     );
   }
 
+  if (screen === 'mySchedule') {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <MyScheduleScreen onBack={() => setScreen('home')} />
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <LinearGradient
@@ -72,7 +82,10 @@ export default function App() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
           >
-            <CalendarView onAddPress={handleAddPress} />
+            <CalendarView
+              onAddPress={handleAddPress}
+              onMySchedulePress={() => setScreen('mySchedule')}
+            />
           </ScrollView>
         </SafeAreaView>
       </LinearGradient>

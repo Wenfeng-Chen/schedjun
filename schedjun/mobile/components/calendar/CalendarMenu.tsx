@@ -5,23 +5,38 @@ import { colors, radius, spacing } from '../../constants/theme';
 interface CalendarMenuProps {
   visible: boolean;
   onClose: () => void;
+  onMySchedulePress?: () => void;
 }
 
-const MENU_ITEMS = ['我的日程', '日期跳转'];
+const MENU_ITEMS = [
+  { label: '我的日程', action: 'mySchedule' as const },
+  { label: '日期跳转', action: 'dateJump' as const },
+];
 
-export default function CalendarMenu({ visible, onClose }: CalendarMenuProps) {
+export default function CalendarMenu({
+  visible,
+  onClose,
+  onMySchedulePress,
+}: CalendarMenuProps) {
+  const handlePress = (action: (typeof MENU_ITEMS)[number]['action']) => {
+    onClose();
+    if (action === 'mySchedule') {
+      onMySchedulePress?.();
+    }
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <View style={styles.menuContainer}>
           <View style={styles.menuCard}>
-            {MENU_ITEMS.map((label, index) => (
+            {MENU_ITEMS.map((item, index) => (
               <Pressable
-                key={label}
+                key={item.label}
                 style={[styles.menuItem, index < MENU_ITEMS.length - 1 && styles.menuItemBorder]}
-                onPress={() => undefined}
+                onPress={() => handlePress(item.action)}
               >
-                <Text style={styles.menuText}>{label}</Text>
+                <Text style={styles.menuText}>{item.label}</Text>
               </Pressable>
             ))}
           </View>

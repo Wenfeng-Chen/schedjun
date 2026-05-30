@@ -20,9 +20,10 @@ const PAGE_WIDTH = SCREEN_WIDTH - CARD_HORIZONTAL * 2;
 
 interface CalendarViewProps {
   onAddPress?: (selectedDate: Date) => void;
+  onMySchedulePress?: () => void;
 }
 
-export default function CalendarView({ onAddPress }: CalendarViewProps) {
+export default function CalendarView({ onAddPress, onMySchedulePress }: CalendarViewProps) {
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -105,7 +106,11 @@ export default function CalendarView({ onAddPress }: CalendarViewProps) {
 
       <SelectedDayDetail selectedDate={selectedDate} today={today} />
 
-      <CalendarMenu visible={menuVisible} onClose={() => setMenuVisible(false)} />
+      <CalendarMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        onMySchedulePress={onMySchedulePress}
+      />
     </View>
   );
 }
