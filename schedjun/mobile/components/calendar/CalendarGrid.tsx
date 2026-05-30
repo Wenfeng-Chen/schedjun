@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeInDown,
@@ -25,14 +26,28 @@ interface CalendarGridProps {
   onSelectDate: (date: Date) => void;
   gridWidth: number;
   monthKey: string;
+  disableEnterAnimation?: boolean;
 }
 
-export default function CalendarGrid({
+export default memo(CalendarGrid, (prev: CalendarGridProps, next: CalendarGridProps) => {
+  return (
+    prev.monthRef.year === next.monthRef.year &&
+    prev.monthRef.month === next.monthRef.month &&
+    prev.gridWidth === next.gridWidth &&
+    prev.disableEnterAnimation === next.disableEnterAnimation &&
+    prev.today.getTime() === next.today.getTime() &&
+    prev.selectedDate.getTime() === next.selectedDate.getTime() &&
+    prev.onSelectDate === next.onSelectDate
+  );
+});
+
+function CalendarGrid({
   monthRef,
   today,
   selectedDate,
   onSelectDate,
   gridWidth,
+  disableEnterAnimation = false,
 }: CalendarGridProps) {
   const days = buildCalendarDays(monthRef, today);
   const cellSize = Math.floor((gridWidth - GRID_PADDING * 2) / 7);
@@ -58,6 +73,7 @@ export default function CalendarGrid({
             onSelectDate={onSelectDate}
             cellSize={cellSize}
             daySize={daySize}
+            disableEnterAnimation={disableEnterAnimation}
           />
         ))}
       </View>
@@ -72,6 +88,7 @@ interface DayCellProps {
   onSelectDate: (date: Date) => void;
   cellSize: number;
   daySize: number;
+  disableEnterAnimation?: boolean;
 }
 
 function DayCell({
@@ -81,6 +98,7 @@ function DayCell({
   onSelectDate,
   cellSize,
   daySize,
+  disableEnterAnimation = false,
 }: DayCellProps) {
   const scale = useSharedValue(1);
 
@@ -104,45 +122,55 @@ function DayCell({
 
   const row = Math.floor(index / 7);
 
+  const cellStyle = {
+    width: cellSize,
+    height: cellSize,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  };
+
+  const cellContent = (
+    <Pressable
+      onPressIn={() => {
+        scale.value = withSpring(0.9, { damping: 14, stiffness: 300 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 14, stiffness: 300 });
+      }}
+      onPress={() => onSelectDate(item.date)}
+    >
+      <Animated.View
+        style={[
+          animatedStyle,
+          styles.dayInner,
+          { width: daySize, height: daySize, borderRadius: daySize / 3 },
+          isToday && styles.todayInner,
+          isOtherSelected && styles.selectedInner,
+        ]}
+      >
+        <Text
+          style={[
+            styles.dayText,
+            { color: isToday ? colors.surface : dayColor },
+            isToday && styles.todayText,
+          ]}
+        >
+          {item.day}
+        </Text>
+      </Animated.View>
+    </Pressable>
+  );
+
+  if (disableEnterAnimation) {
+    return <View style={cellStyle}>{cellContent}</View>;
+  }
+
   return (
     <Animated.View
       entering={FadeInDown.delay(row * 35).duration(220)}
-      style={{
-        width: cellSize,
-        height: cellSize,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
+      style={cellStyle}
     >
-      <Pressable
-        onPressIn={() => {
-          scale.value = withSpring(0.9, { damping: 14, stiffness: 300 });
-        }}
-        onPressOut={() => {
-          scale.value = withSpring(1, { damping: 14, stiffness: 300 });
-        }}
-        onPress={() => onSelectDate(item.date)}
-      >
-        <Animated.View
-          style={[
-            animatedStyle,
-            styles.dayInner,
-            { width: daySize, height: daySize, borderRadius: daySize / 3 },
-            isToday && styles.todayInner,
-            isOtherSelected && styles.selectedInner,
-          ]}
-        >
-          <Text
-            style={[
-              styles.dayText,
-              { color: isToday ? colors.surface : dayColor },
-              isToday && styles.todayText,
-            ]}
-          >
-            {item.day}
-          </Text>
-        </Animated.View>
-      </Pressable>
+      {cellContent}
     </Animated.View>
   );
 }
