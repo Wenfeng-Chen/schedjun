@@ -7,13 +7,20 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
+import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import CalendarView from './components/calendar/CalendarView';
+import CreateEventScreen, { EventFormData } from './components/event/CreateEventScreen';
 import { colors } from './constants/theme';
 
+type AppScreen = 'home' | 'createEvent';
+
 export default function App() {
+  const [screen, setScreen] = useState<AppScreen>('home');
+  const [createEventDate, setCreateEventDate] = useState<Date>(() => new Date());
+
   const [fontsLoaded] = useFonts({
     NotoSerifSC_700Bold,
     PlusJakartaSans_500Medium,
@@ -21,11 +28,33 @@ export default function App() {
     PlusJakartaSans_700Bold,
   });
 
+  const handleAddPress = (selectedDate: Date) => {
+    setCreateEventDate(selectedDate);
+    setScreen('createEvent');
+  };
+
+  const handleSaveEvent = (_data: EventFormData) => {
+    // 后续 PR 接入日程存储
+  };
+
   if (!fontsLoaded) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
+    );
+  }
+
+  if (screen === 'createEvent') {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <CreateEventScreen
+          initialDate={createEventDate}
+          onClose={() => setScreen('home')}
+          onSave={handleSaveEvent}
+        />
+      </SafeAreaProvider>
     );
   }
 
@@ -43,7 +72,7 @@ export default function App() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
           >
-            <CalendarView />
+            <CalendarView onAddPress={handleAddPress} />
           </ScrollView>
         </SafeAreaView>
       </LinearGradient>
