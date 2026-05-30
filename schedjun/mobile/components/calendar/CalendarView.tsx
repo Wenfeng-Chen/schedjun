@@ -8,6 +8,8 @@ import {
   isSameDay,
   monthDiff,
 } from '../../utils/calendarUtils';
+import { ScheduleItem } from '../../constants/scheduleTypes';
+import { getSchedulesForDate } from '../../utils/scheduleDetailUtils';
 import CalendarHeader from './CalendarHeader';
 import CalendarMenu from './CalendarMenu';
 import CalendarMonthPager from './CalendarMonthPager';
@@ -25,11 +27,18 @@ interface CalendarPageState {
 }
 
 interface CalendarViewProps {
+  schedules: ScheduleItem[];
   onAddPress?: (selectedDate: Date) => void;
   onMySchedulePress?: () => void;
+  onSchedulePress?: (scheduleId: string) => void;
 }
 
-export default function CalendarView({ onAddPress, onMySchedulePress }: CalendarViewProps) {
+export default function CalendarView({
+  schedules,
+  onAddPress,
+  onMySchedulePress,
+  onSchedulePress,
+}: CalendarViewProps) {
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -48,6 +57,11 @@ export default function CalendarView({ onAddPress, onMySchedulePress }: Calendar
   const visibleMonth = useMemo(
     () => addMonths(baseMonth, headerMonthOffset),
     [baseMonth, headerMonthOffset],
+  );
+
+  const daySchedules = useMemo(
+    () => getSchedulesForDate(schedules, selectedDate),
+    [schedules, selectedDate],
   );
 
   const handleSwipeMonthStart = useCallback((delta: number) => {
@@ -118,7 +132,11 @@ export default function CalendarView({ onAddPress, onMySchedulePress }: Calendar
           {showJumpToToday && <JumpToTodayButton onPress={handleJumpToToday} />}
         </View>
 
-        <SelectedDayDetail selectedDate={selectedDate} />
+        <SelectedDayDetail
+          selectedDate={selectedDate}
+          schedules={daySchedules}
+          onSchedulePress={onSchedulePress}
+        />
       </View>
 
       <CalendarMenu

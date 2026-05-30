@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MOCK_SCHEDULES } from '../../constants/mockSchedules';
 import { ScheduleItem } from '../../constants/scheduleTypes';
 import { fonts } from '../../constants/fonts';
 import { colors, radius, spacing } from '../../constants/theme';
@@ -23,7 +22,10 @@ import {
 } from '../../utils/scheduleUtils';
 
 interface MyScheduleScreenProps {
+  schedules: ScheduleItem[];
+  onSchedulesChange: (schedules: ScheduleItem[]) => void;
   onBack: () => void;
+  onSchedulePress: (scheduleId: string) => void;
 }
 
 function SelectionCheckbox({ selected }: { selected: boolean }) {
@@ -87,8 +89,12 @@ function DayCard({
   );
 }
 
-export default function MyScheduleScreen({ onBack }: MyScheduleScreenProps) {
-  const [schedules, setSchedules] = useState<ScheduleItem[]>(MOCK_SCHEDULES);
+export default function MyScheduleScreen({
+  schedules,
+  onSchedulesChange,
+  onBack,
+  onSchedulePress,
+}: MyScheduleScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -138,6 +144,7 @@ export default function MyScheduleScreen({ onBack }: MyScheduleScreenProps) {
       toggleSelection(id);
       return;
     }
+    onSchedulePress(id);
   };
 
   const handleItemLongPress = (id: string) => {
@@ -165,7 +172,7 @@ export default function MyScheduleScreen({ onBack }: MyScheduleScreenProps) {
         text: '删除',
         style: 'destructive',
         onPress: () => {
-          setSchedules((prev) => prev.filter((item) => !selectedIds.has(item.id)));
+          onSchedulesChange(schedules.filter((item) => !selectedIds.has(item.id)));
           exitSelectionMode();
         },
       },
