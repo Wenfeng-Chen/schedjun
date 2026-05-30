@@ -6,6 +6,7 @@ interface CalendarMenuProps {
   visible: boolean;
   onClose: () => void;
   onMySchedulePress?: () => void;
+  onDateJumpPress?: () => void;
 }
 
 const MENU_ITEMS = [
@@ -17,11 +18,15 @@ export default function CalendarMenu({
   visible,
   onClose,
   onMySchedulePress,
+  onDateJumpPress,
 }: CalendarMenuProps) {
   const handlePress = (action: (typeof MENU_ITEMS)[number]['action']) => {
     onClose();
     if (action === 'mySchedule') {
       onMySchedulePress?.();
+    }
+    if (action === 'dateJump') {
+      onDateJumpPress?.();
     }
   };
 
