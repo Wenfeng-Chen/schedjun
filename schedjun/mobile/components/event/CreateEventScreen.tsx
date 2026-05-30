@@ -1,7 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, {
-  DateTimePickerAndroid,
-} from '@react-native-community/datetimepicker';
 import { useMemo, useState } from 'react';
 import {
   Alert,
@@ -19,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '../../constants/fonts';
 import { DEFAULT_REMINDER_RULE, ReminderRule } from '../../constants/reminderConfig';
 import { DEFAULT_REPEAT_RULE, RepeatRule } from '../../constants/repeatConfig';
-import { colors, radius, spacing } from '../../constants/theme';
+import { colors, spacing } from '../../constants/theme';
 import { createDefaultEventTimes, formatEventDateTime } from '../../utils/dateFormatUtils';
 import {
   createDefaultCustomRepeat,
@@ -27,6 +24,7 @@ import {
 } from '../../utils/repeatUtils';
 import { formatReminderLabel } from '../../utils/reminderUtils';
 import CustomRepeatScreen from './CustomRepeatScreen';
+import DateTimePickerModal from './DateTimePickerModal';
 import FormRow from './FormRow';
 import FormSection from './FormSection';
 import ReminderPickerScreen from './ReminderPickerScreen';
@@ -66,60 +64,29 @@ export default function CreateEventScreen({
   const [notes, setNotes] = useState('');
 
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
-  const [tempPickerValue, setTempPickerValue] = useState<Date>(new Date());
 
-  const applyPickerResult = (target: 'start' | 'end', selected: Date) => {
-    if (target === 'start') {
+  const handleDateTimeConfirm = (selected: Date): boolean => {
+    if (pickerTarget === 'start') {
       setStartTime(selected);
       if (selected >= endTime) {
         const adjustedEnd = new Date(selected);
         adjustedEnd.setHours(selected.getHours() + 1);
         setEndTime(adjustedEnd);
       }
-      return;
+      return true;
     }
 
     if (selected <= startTime) {
       Alert.alert('提示', '结束时间需晚于开始时间');
-      return;
+      return false;
     }
-    setEndTime(selected);
-  };
 
-  const openAndroidDateTimePicker = (target: 'start' | 'end', current: Date) => {
-    DateTimePickerAndroid.open({
-      value: current,
-      mode: 'date',
-      onValueChange: (_event, selectedDate) => {
-        DateTimePickerAndroid.open({
-          value: selectedDate,
-          mode: 'time',
-          is24Hour: true,
-          onValueChange: (_timeEvent, selectedTime) => {
-            applyPickerResult(target, selectedTime);
-          },
-        });
-      },
-    });
+    setEndTime(selected);
+    return true;
   };
 
   const openDateTimePicker = (target: 'start' | 'end') => {
-    const current = target === 'start' ? startTime : endTime;
-
-    if (Platform.OS === 'android') {
-      openAndroidDateTimePicker(target, current);
-      return;
-    }
-
-    setTempPickerValue(current);
     setPickerTarget(target);
-  };
-
-  const handleIosPickerConfirm = () => {
-    if (pickerTarget) {
-      applyPickerResult(pickerTarget, tempPickerValue);
-    }
-    setPickerTarget(null);
   };
 
   const handleSave = () => {
@@ -259,29 +226,13 @@ export default function CreateEventScreen({
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {pickerTarget && Platform.OS === 'ios' && (
-        <View style={styles.iosPickerSheet}>
-          <View style={styles.iosPickerHeader}>
-            <Pressable onPress={() => setPickerTarget(null)}>
-              <Text style={styles.iosPickerAction}>取消</Text>
-            </Pressable>
-            <Text style={styles.iosPickerTitle}>
-              {pickerTarget === 'start' ? '开始时间' : '结束时间'}
-            </Text>
-            <Pressable onPress={handleIosPickerConfirm}>
-              <Text style={[styles.iosPickerAction, styles.iosPickerConfirm]}>完成</Text>
-            </Pressable>
-          </View>
-          <DateTimePicker
-            value={tempPickerValue}
-            mode="datetime"
-            display="spinner"
-            locale="zh-CN"
-            onValueChange={(_event, date) => setTempPickerValue(date)}
-          />
-        </View>
-      )}
-
+      <DateTimePickerModal
+        visible={pickerTarget !== null}
+        title={pickerTarget === 'start' ? '开始时间' : '结束时间'}
+        value={pickerTarget === 'start' ? startTime : endTime}
+        onConfirm={handleDateTimeConfirm}
+        onClose={() => setPickerTarget(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -336,36 +287,5 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     minHeight: 100,
     lineHeight: 22,
-  },
-  iosPickerSheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingBottom: spacing.md,
-  },
-  iosPickerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  iosPickerTitle: {
-    fontFamily: fonts.bodySemiBold,
-    fontSize: 15,
-    color: colors.text,
-  },
-  iosPickerAction: {
-    fontFamily: fonts.body,
-    fontSize: 15,
-    color: colors.textSecondary,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.xs,
-  },
-  iosPickerConfirm: {
-    color: colors.primary,
-    fontFamily: fonts.bodySemiBold,
   },
 });

@@ -11,6 +11,41 @@ export function formatEventDateTime(date: Date): string {
   return `${year}年${month}月${day}日${weekday} ${hours}:${minutes}`;
 }
 
+export function formatPickerDateLabel(date: Date): string {
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${WEEKDAY_NAMES[date.getDay()]}`;
+}
+
+export function isSameDate(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+export function buildDateTime(datePart: Date, hour: number, minute: number): Date {
+  const result = new Date(datePart);
+  result.setHours(hour, minute, 0, 0);
+  return result;
+}
+
+export function generateDateOptions(anchor: Date, daysBefore = 30, daysAfter = 365): Date[] {
+  const start = new Date(anchor);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - daysBefore);
+
+  return Array.from({ length: daysBefore + daysAfter + 1 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return date;
+  });
+}
+
+export function findDateOptionIndex(options: Date[], target: Date): number {
+  const index = options.findIndex((item) => isSameDate(item, target));
+  return index >= 0 ? index : 0;
+}
+
 export function createDefaultEventTimes(baseDate: Date): { start: Date; end: Date } {
   const start = new Date(baseDate);
   start.setHours(10, 30, 0, 0);
