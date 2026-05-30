@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fonts } from '../../constants/fonts';
-import { REMINDER_OPTIONS } from '../../constants/eventOptions';
+import { DEFAULT_REMINDER_RULE, ReminderRule } from '../../constants/reminderConfig';
 import { DEFAULT_REPEAT_RULE, RepeatRule } from '../../constants/repeatConfig';
 import { colors, radius, spacing } from '../../constants/theme';
 import { createDefaultEventTimes, formatEventDateTime } from '../../utils/dateFormatUtils';
@@ -25,10 +25,11 @@ import {
   createDefaultCustomRepeat,
   formatRepeatLabel,
 } from '../../utils/repeatUtils';
+import { formatReminderLabel } from '../../utils/reminderUtils';
 import CustomRepeatScreen from './CustomRepeatScreen';
 import FormRow from './FormRow';
 import FormSection from './FormSection';
-import OptionPickerModal from './OptionPickerModal';
+import ReminderPickerScreen from './ReminderPickerScreen';
 import RepeatPickerScreen from './RepeatPickerScreen';
 
 export interface EventFormData {
@@ -36,7 +37,7 @@ export interface EventFormData {
   startTime: Date;
   endTime: Date;
   repeat: RepeatRule;
-  reminder: string;
+  reminder: ReminderRule;
   notes: string;
 }
 
@@ -47,7 +48,7 @@ interface CreateEventScreenProps {
 }
 
 type PickerTarget = 'start' | 'end' | null;
-type EventSubScreen = 'form' | 'repeat' | 'customRepeat';
+type EventSubScreen = 'form' | 'repeat' | 'customRepeat' | 'reminder';
 
 export default function CreateEventScreen({
   initialDate,
@@ -61,12 +62,11 @@ export default function CreateEventScreen({
   const [startTime, setStartTime] = useState(defaultTimes.start);
   const [endTime, setEndTime] = useState(defaultTimes.end);
   const [repeatRule, setRepeatRule] = useState<RepeatRule>(DEFAULT_REPEAT_RULE);
-  const [reminder, setReminder] = useState<string>(REMINDER_OPTIONS[1]);
+  const [reminderRule, setReminderRule] = useState<ReminderRule>(DEFAULT_REMINDER_RULE);
   const [notes, setNotes] = useState('');
 
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
   const [tempPickerValue, setTempPickerValue] = useState<Date>(new Date());
-  const [reminderPickerVisible, setReminderPickerVisible] = useState(false);
 
   const applyPickerResult = (target: 'start' | 'end', selected: Date) => {
     if (target === 'start') {
@@ -139,7 +139,7 @@ export default function CreateEventScreen({
       startTime,
       endTime,
       repeat: repeatRule,
-      reminder,
+      reminder: reminderRule,
       notes: notes.trim(),
     });
     onClose();
@@ -155,6 +155,18 @@ export default function CreateEventScreen({
           setSubScreen('form');
         }}
         onCustom={() => setSubScreen('customRepeat')}
+      />
+    );
+  }
+
+  if (subScreen === 'reminder') {
+    return (
+      <ReminderPickerScreen
+        value={reminderRule}
+        onBack={(rule) => {
+          setReminderRule(rule);
+          setSubScreen('form');
+        }}
       />
     );
   }
@@ -227,9 +239,9 @@ export default function CreateEventScreen({
             />
             <FormRow
               label="提醒"
-              value={reminder}
+              value={formatReminderLabel(reminderRule)}
               isLast
-              onPress={() => setReminderPickerVisible(true)}
+              onPress={() => setSubScreen('reminder')}
             />
           </FormSection>
 
@@ -270,14 +282,6 @@ export default function CreateEventScreen({
         </View>
       )}
 
-      <OptionPickerModal
-        visible={reminderPickerVisible}
-        title="提醒"
-        options={REMINDER_OPTIONS}
-        selected={reminder}
-        onSelect={setReminder}
-        onClose={() => setReminderPickerVisible(false)}
-      />
     </SafeAreaView>
   );
 }
