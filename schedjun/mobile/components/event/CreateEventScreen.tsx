@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, {
   DateTimePickerAndroid,
 } from '@react-native-community/datetimepicker';
-import { useMemo, useState } from 'react';import {
+import { useMemo, useState } from 'react';
+import {
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -16,18 +17,25 @@ import { useMemo, useState } from 'react';import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fonts } from '../../constants/fonts';
-import { REMINDER_OPTIONS, REPEAT_OPTIONS } from '../../constants/eventOptions';
+import { REMINDER_OPTIONS } from '../../constants/eventOptions';
+import { DEFAULT_REPEAT_RULE, RepeatRule } from '../../constants/repeatConfig';
 import { colors, radius, spacing } from '../../constants/theme';
 import { createDefaultEventTimes, formatEventDateTime } from '../../utils/dateFormatUtils';
+import {
+  createDefaultCustomRepeat,
+  formatRepeatLabel,
+} from '../../utils/repeatUtils';
+import CustomRepeatScreen from './CustomRepeatScreen';
 import FormRow from './FormRow';
 import FormSection from './FormSection';
 import OptionPickerModal from './OptionPickerModal';
+import RepeatPickerScreen from './RepeatPickerScreen';
 
 export interface EventFormData {
   title: string;
   startTime: Date;
   endTime: Date;
-  repeat: string;
+  repeat: RepeatRule;
   reminder: string;
   notes: string;
 }
@@ -39,7 +47,7 @@ interface CreateEventScreenProps {
 }
 
 type PickerTarget = 'start' | 'end' | null;
-type OptionTarget = 'repeat' | 'reminder' | null;
+type EventSubScreen = 'form' | 'repeat' | 'customRepeat';
 
 export default function CreateEventScreen({
   initialDate,
@@ -48,16 +56,17 @@ export default function CreateEventScreen({
 }: CreateEventScreenProps) {
   const defaultTimes = useMemo(() => createDefaultEventTimes(initialDate), [initialDate]);
 
+  const [subScreen, setSubScreen] = useState<EventSubScreen>('form');
   const [title, setTitle] = useState('');
   const [startTime, setStartTime] = useState(defaultTimes.start);
   const [endTime, setEndTime] = useState(defaultTimes.end);
-  const [repeat, setRepeat] = useState<string>(REPEAT_OPTIONS[0]);
+  const [repeatRule, setRepeatRule] = useState<RepeatRule>(DEFAULT_REPEAT_RULE);
   const [reminder, setReminder] = useState<string>(REMINDER_OPTIONS[1]);
   const [notes, setNotes] = useState('');
 
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
   const [tempPickerValue, setTempPickerValue] = useState<Date>(new Date());
-  const [optionTarget, setOptionTarget] = useState<OptionTarget>(null);
+  const [reminderPickerVisible, setReminderPickerVisible] = useState(false);
 
   const applyPickerResult = (target: 'start' | 'end', selected: Date) => {
     if (target === 'start') {
@@ -112,6 +121,7 @@ export default function CreateEventScreen({
     }
     setPickerTarget(null);
   };
+
   const handleSave = () => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
@@ -128,12 +138,39 @@ export default function CreateEventScreen({
       title: trimmedTitle,
       startTime,
       endTime,
-      repeat,
+      repeat: repeatRule,
       reminder,
       notes: notes.trim(),
     });
     onClose();
   };
+
+  if (subScreen === 'repeat') {
+    return (
+      <RepeatPickerScreen
+        value={repeatRule}
+        onBack={() => setSubScreen('form')}
+        onSelect={(rule) => {
+          setRepeatRule(rule);
+          setSubScreen('form');
+        }}
+        onCustom={() => setSubScreen('customRepeat')}
+      />
+    );
+  }
+
+  if (subScreen === 'customRepeat') {
+    return (
+      <CustomRepeatScreen
+        value={repeatRule.custom ?? createDefaultCustomRepeat(startTime)}
+        startTime={startTime}
+        onBack={(custom) => {
+          setRepeatRule({ preset: 'custom', custom });
+          setSubScreen('repeat');
+        }}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -178,20 +215,21 @@ export default function CreateEventScreen({
               label="结束时间"
               value={formatEventDateTime(endTime)}
               isLast
-              onPress={() => openDateTimePicker('end')}            />
+              onPress={() => openDateTimePicker('end')}
+            />
           </FormSection>
 
           <FormSection>
             <FormRow
               label="重复"
-              value={repeat}
-              onPress={() => setOptionTarget('repeat')}
+              value={formatRepeatLabel(repeatRule)}
+              onPress={() => setSubScreen('repeat')}
             />
             <FormRow
               label="提醒"
               value={reminder}
               isLast
-              onPress={() => setOptionTarget('reminder')}
+              onPress={() => setReminderPickerVisible(true)}
             />
           </FormSection>
 
@@ -231,22 +269,14 @@ export default function CreateEventScreen({
           />
         </View>
       )}
-      <OptionPickerModal
-        visible={optionTarget === 'repeat'}
-        title="重复"
-        options={REPEAT_OPTIONS}
-        selected={repeat}
-        onSelect={setRepeat}
-        onClose={() => setOptionTarget(null)}
-      />
 
       <OptionPickerModal
-        visible={optionTarget === 'reminder'}
+        visible={reminderPickerVisible}
         title="提醒"
         options={REMINDER_OPTIONS}
         selected={reminder}
         onSelect={setReminder}
-        onClose={() => setOptionTarget(null)}
+        onClose={() => setReminderPickerVisible(false)}
       />
     </SafeAreaView>
   );
