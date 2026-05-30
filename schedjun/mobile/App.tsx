@@ -11,6 +11,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
+import FloatingAssistant from './components/assistant/FloatingAssistant';
 import CalendarView from './components/calendar/CalendarView';
 import CreateEventScreen, { EventFormData } from './components/event/CreateEventScreen';
 import EditEventScreen, { EditEventFormData } from './components/event/EditEventScreen';
@@ -117,15 +118,20 @@ export default function App() {
     );
   }
 
+  const assistantOverlay = <FloatingAssistant />;
+
   if (screen === 'createEvent') {
     return (
       <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <CreateEventScreen
-          initialDate={createEventDate}
-          onClose={() => setScreen('home')}
-          onSave={handleSaveEvent}
-        />
+        <View style={styles.root}>
+          <StatusBar style="dark" />
+          <CreateEventScreen
+            initialDate={createEventDate}
+            onClose={() => setScreen('home')}
+            onSave={handleSaveEvent}
+          />
+          {assistantOverlay}
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -133,12 +139,15 @@ export default function App() {
   if (screen === 'editEvent' && editingSchedule) {
     return (
       <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <EditEventScreen
-          initialData={scheduleToFormData(editingSchedule)}
-          onClose={handleCloseEdit}
-          onSave={handleSaveEdit}
-        />
+        <View style={styles.root}>
+          <StatusBar style="dark" />
+          <EditEventScreen
+            initialData={scheduleToFormData(editingSchedule)}
+            onClose={handleCloseEdit}
+            onSave={handleSaveEdit}
+          />
+          {assistantOverlay}
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -146,28 +155,32 @@ export default function App() {
   if (screen === 'mySchedule') {
     return (
       <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <MyScheduleScreen
-          schedules={schedules}
-          onSchedulesChange={setSchedules}
-          onBack={() => setScreen('home')}
-          onSchedulePress={openScheduleDetail}
-        />
-        {selectedSchedule && (
-          <ScheduleDetailScreen
-            schedule={selectedSchedule}
-            onClose={closeScheduleDetail}
-            onEdit={openScheduleEdit}
-            onDelete={handleDeleteSchedule}
+        <View style={styles.root}>
+          <StatusBar style="dark" />
+          <MyScheduleScreen
+            schedules={schedules}
+            onSchedulesChange={setSchedules}
+            onBack={() => setScreen('home')}
+            onSchedulePress={openScheduleDetail}
           />
-        )}
+          {selectedSchedule && (
+            <ScheduleDetailScreen
+              schedule={selectedSchedule}
+              onClose={closeScheduleDetail}
+              onEdit={openScheduleEdit}
+              onDelete={handleDeleteSchedule}
+            />
+          )}
+          {assistantOverlay}
+        </View>
       </SafeAreaProvider>
     );
   }
 
   return (
     <SafeAreaProvider>
-      <LinearGradient
+      <View style={styles.root}>
+        <LinearGradient
         colors={[colors.backgroundWarm, colors.backgroundCool]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -197,11 +210,16 @@ export default function App() {
           onDelete={handleDeleteSchedule}
         />
       )}
+      {assistantOverlay}
+      </View>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   gradient: {
     flex: 1,
   },
