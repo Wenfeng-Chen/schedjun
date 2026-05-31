@@ -8,7 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import FloatingAssistant from './components/assistant/FloatingAssistant';
@@ -20,7 +20,7 @@ import MineScreen from './components/profile/MineScreen';
 import MyScheduleScreen from './components/schedule/MyScheduleScreen';
 import ScheduleDetailScreen from './components/schedule/ScheduleDetailScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { createScheduleApi, listSchedulesApi, updateScheduleApi } from './api/scheduleApi';
+import { createScheduleApi, deleteScheduleApi, listSchedulesApi, updateScheduleApi } from './api/scheduleApi';
 import { ScheduleItem } from './constants/scheduleTypes';
 import { colors, spacing } from './constants/theme';
 import { scheduleToFormData } from './utils/scheduleDetailUtils';
@@ -177,13 +177,24 @@ function MainApp() {
     setOverlayScreen('editEvent');
   }, [selectedScheduleId, activeTab]);
 
-  const handleDeleteSchedule = useCallback(() => {
+  const handleDeleteSchedule = useCallback(async () => {
     if (!selectedScheduleId) {
       return;
     }
-    setSchedules((prev) => prev.filter((item) => item.id !== selectedScheduleId));
-    setSelectedScheduleId(null);
-  }, [selectedScheduleId]);
+
+    if (!isLoggedIn || !accessToken) {
+      Alert.alert('提示', '请先登录后再删除日程');
+      return;
+    }
+
+    try {
+      await deleteScheduleApi(accessToken, selectedScheduleId);
+      setSchedules((prev) => prev.filter((item) => item.id !== selectedScheduleId));
+      setSelectedScheduleId(null);
+    } catch (error) {
+      Alert.alert('提示', error instanceof Error ? error.message : '删除失败');
+    }
+  }, [selectedScheduleId, accessToken, isLoggedIn]);
 
   const handleSaveEdit = useCallback(
     async (data: EditEventFormData) => {

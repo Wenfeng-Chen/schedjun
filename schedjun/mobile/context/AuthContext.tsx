@@ -47,13 +47,17 @@ function toUser(profile: {
   };
 }
 
-async function restoreSession(setUser: (user: User) => void) {
+async function restoreSession(
+  setUser: (user: User) => void,
+  setAccessToken: (token: string) => void,
+) {
   const token = await getStoredAccessToken();
   if (!token) {
     return;
   }
 
   const profile = await getCurrentUserApi(token);
+  setAccessToken(token);
   setUser(toUser(profile));
 }
 
@@ -91,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        await restoreSession(setUser);
+        await restoreSession(setUser, setAccessToken);
       } catch {
         await clearStoredAccessToken();
         if (!cancelled) {
