@@ -22,7 +22,10 @@ async function requestJson<T>(
     ...(options.headers as Record<string, string> | undefined),
   };
 
-  if (options.body && !headers['Content-Type']) {
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+
+  // FormData 必须由 fetch 自动带 multipart boundary，不能设 application/json
+  if (options.body && !headers['Content-Type'] && !isFormData) {
     headers['Content-Type'] = 'application/json';
   }
 
@@ -39,6 +42,9 @@ async function requestJson<T>(
     });
   } catch (error) {
     console.error('[api] request failed:', API_BASE_URL, error);
+    if (error instanceof Error && error.message.includes('FormData')) {
+      throw error;
+    }
     throw new Error(`无法连接服务器（${API_BASE_URL}）。${getApiConnectionHint()}`);
   }
 
@@ -66,6 +72,18 @@ export async function postJsonWithToken<T>(
   return requestJson<T>(path, {
     method: 'POST',
     body: JSON.stringify(body),
+    token,
+  });
+}
+
+export async function postMultipartWithToken<T>(
+  path: string,
+  formData: FormData,
+  token: string,
+): Promise<ApiResult<T>> {
+  return requestJson<T>(path, {
+    method: 'POST',
+    body: formData,
     token,
   });
 }

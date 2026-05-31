@@ -1,53 +1,57 @@
-{
-  "properties": [
-    {
-      "name": "schedjun.jwt.secret",
-      "type": "java.lang.String",
-      "description": "JWT signing secret key."
-    },
-    {
-      "name": "schedjun.jwt.expires-in",
-      "type": "java.lang.Long",
-      "description": "JWT expiration time in seconds."
-    },
-    {
-      "name": "schedjun.iflytek.asr.app-id",
-      "type": "java.lang.String",
-      "description": "iFlytek ASR application id."
-    },
-    {
-      "name": "schedjun.iflytek.asr.api-key",
-      "type": "java.lang.String",
-      "description": "iFlytek ASR API key."
-    },
-    {
-      "name": "schedjun.iflytek.asr.api-secret",
-      "type": "java.lang.String",
-      "description": "iFlytek ASR API secret."
-    },
-    {
-      "name": "schedjun.iflytek.asr.host",
-      "type": "java.lang.String",
-      "description": "iFlytek ASR WebSocket host.",
-      "defaultValue": "iat-api.xfyun.cn"
-    },
-    {
-      "name": "schedjun.iflytek.asr.path",
-      "type": "java.lang.String",
-      "description": "iFlytek ASR WebSocket path.",
-      "defaultValue": "/v2/iat"
-    },
-    {
-      "name": "schedjun.iflytek.asr.language",
-      "type": "java.lang.String",
-      "description": "iFlytek ASR language code.",
-      "defaultValue": "zh_cn"
-    },
-    {
-      "name": "schedjun.iflytek.asr.sample-rate",
-      "type": "java.lang.Integer",
-      "description": "Audio sample rate in Hz.",
-      "defaultValue": 16000
-    }
-  ]
-}
+{"properties": [
+  {
+    "name": "schedjun.jwt.secret",
+    "type": "java.lang.String",
+    "description": "JWT signing secret key."
+  },
+  {
+    "name": "schedjun.jwt.expires-in",
+    "type": "java.lang.Long",
+    "description": "JWT expiration time in seconds."
+  },
+  {
+    "name": "schedjun.iflytek.asr.app-id",
+    "type": "java.lang.String",
+    "description": "iFlytek ASR application id."
+  },
+  {
+    "name": "schedjun.iflytek.asr.api-key",
+    "type": "java.lang.String",
+    "description": "iFlytek ASR API key."
+  },
+  {
+    "name": "schedjun.iflytek.asr.api-secret",
+    "type": "java.lang.String",
+    "description": "iFlytek ASR API secret."
+  },
+  {
+    "name": "schedjun.iflytek.asr.host",
+    "type": "java.lang.String",
+    "description": "iFlytek ASR WebSocket host.",
+    "defaultValue": "iat-api.xfyun.cn"
+  },
+  {
+    "name": "schedjun.iflytek.asr.path",
+    "type": "java.lang.String",
+    "description": "iFlytek ASR WebSocket path.",
+    "defaultValue": "/v2/iat"
+  },
+  {
+    "name": "schedjun.iflytek.asr.language",
+    "type": "java.lang.String",
+    "description": "iFlytek ASR language code.",
+    "defaultValue": "zh_cn"
+  },
+  {
+    "name": "schedjun.iflytek.asr.sample-rate",
+    "type": "java.lang.Integer",
+    "description": "Audio sample rate in Hz.",
+    "defaultValue": 16000
+  },
+  {
+    "name": "schedjun.assistant.history-limit",
+    "type": "java.lang.Integer",
+    "description": "Max assistant messages loaded per group for AI context.",
+    "defaultValue": 20
+  }
+]}

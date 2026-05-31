@@ -1,7 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
+import {
+  AudioModule,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -12,17 +25,27 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  confirmAssistantApi,
+  voiceToScheduleApi,
+  type ScheduleDraft,
+} from '../../api/assistantApi';
+import {
+  assistantRecordingOptions,
+  createAssistantGroupId,
+} from '../../constants/assistantRecording';
 import { fonts } from '../../constants/fonts';
 import { colors, radius, spacing } from '../../constants/theme';
+import { useAuth } from '../../context/AuthContext';
 import DefaultAvatar from '../profile/DefaultAvatar';
 import VoiceWaveform from './VoiceWaveform';
 
-type VoiceState = 'idle' | 'listening';
+type VoiceState = 'idle' | 'listening' | 'processing';
 
 const HINTS = [
   '明天下午三点开会',
-  '每周一上午十点团队站会',
-  '下周五提醒交周报',
+  '把明天的开会改到四点',
+  '删除明天的开会',
 ];
 
 const BOTTOM_GLOW_COLORS = [
@@ -32,14 +55,68 @@ const BOTTOM_GLOW_COLORS = [
   'rgba(167,186,255,0.46)',
 ] as const;
 
-interface AssistantChatOverlayProps {
-  onClose: () => void;
+interface PendingConfirm {
+  messageId: string;
+  intent: string;
+  reply: string;
+  asrText: string;
+  scheduleDraft: ScheduleDraft;
 }
 
-export default function AssistantChatOverlay({ onClose }: AssistantChatOverlayProps) {
+function getConfirmCopy(intent: string) {
+  switch (intent) {
+    case 'update_schedule':
+      return {
+        status: '请确认是否修改日程',
+        action: '确认后将更新你的日程',
+        confirmLabel: '确认修改',
+        destructive: false,
+      };
+    case 'delete_schedule':
+      return {
+        status: '请确认是否删除日程',
+        action: '确认后将永久删除此日程',
+        confirmLabel: '确认删除',
+        destructive: true,
+      };
+    default:
+      return {
+        status: '请确认是否创建日程',
+        action: '确认后将写入你的日程',
+        confirmLabel: '确认创建',
+        destructive: false,
+      };
+  }
+}
+
+interface AssistantChatOverlayProps {
+  onClose: () => void;
+  onScheduleCreated?: () => void;
+}
+
+function formatDraftTime(iso: string): string {
+  const date = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export default function AssistantChatOverlay({
+  onClose,
+  onScheduleCreated,
+}: AssistantChatOverlayProps) {
   const insets = useSafeAreaInsets();
+  const { accessToken, user } = useAuth();
+  const audioRecorder = useAudioRecorder(assistantRecordingOptions);
+  const recorderState = useAudioRecorderState(audioRecorder);
+
+  const groupIdRef = useRef(createAssistantGroupId());
+  const recordingStartedAtRef = useRef<number | null>(null);
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [hintIndex, setHintIndex] = useState(0);
+  const [assistantReply, setAssistantReply] = useState<string | null>(null);
+  const [userText, setUserText] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [permissionReady, setPermissionReady] = useState(false);
 
   const backdropOpacity = useSharedValue(0);
   const panelTranslateY = useSharedValue(120);
@@ -48,8 +125,33 @@ export default function AssistantChatOverlay({ onClose }: AssistantChatOverlayPr
   useEffect(() => {
     backdropOpacity.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) });
     panelTranslateY.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.cubic) });
-    setVoiceState('idle');
   }, [backdropOpacity, panelTranslateY]);
+
+  useEffect(() => {
+    let active = true;
+
+    (async () => {
+      const status = await AudioModule.requestRecordingPermissionsAsync();
+      if (!active) {
+        return;
+      }
+      if (!status.granted) {
+        Alert.alert('需要麦克风权限', '请在系统设置中允许 Schedjun 使用麦克风。');
+        return;
+      }
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: true,
+      });
+      if (active) {
+        setPermissionReady(true);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -59,7 +161,7 @@ export default function AssistantChatOverlay({ onClose }: AssistantChatOverlayPr
   }, []);
 
   useEffect(() => {
-    if (voiceState === 'listening') {
+    if (voiceState === 'listening' || recorderState.isRecording) {
       micPulse.value = withRepeat(
         withSequence(
           withTiming(1.12, { duration: 700, easing: Easing.inOut(Easing.quad) }),
@@ -71,7 +173,167 @@ export default function AssistantChatOverlay({ onClose }: AssistantChatOverlayPr
       return;
     }
     micPulse.value = withTiming(1, { duration: 200 });
-  }, [voiceState, micPulse]);
+  }, [voiceState, recorderState.isRecording, micPulse]);
+
+  const processRecording = useCallback(
+    async (uri: string) => {
+      if (!accessToken) {
+        Alert.alert('请先登录', '登录后才能使用君听语音助手。');
+        setVoiceState('idle');
+        return;
+      }
+
+      setVoiceState('processing');
+      setPendingConfirm(null);
+
+      try {
+        const data = await voiceToScheduleApi(accessToken, {
+          groupId: groupIdRef.current,
+          audioUri: uri,
+          timezone: user?.timezone,
+        });
+
+        setUserText(data.asrText);
+        setAssistantReply(data.reply);
+
+        if (data.needConfirm && data.scheduleDraft) {
+          setPendingConfirm({
+            messageId: data.messageId,
+            intent: data.intent,
+            reply: data.reply,
+            asrText: data.asrText,
+            scheduleDraft: data.scheduleDraft,
+          });
+          return;
+        }
+
+        if (data.schedule || data.intent === 'delete_schedule') {
+          onScheduleCreated?.();
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '语音识别失败';
+        Alert.alert('君听', message);
+        setAssistantReply(null);
+        setUserText(null);
+      } finally {
+        setVoiceState('idle');
+      }
+    },
+    [accessToken, onScheduleCreated, user?.timezone],
+  );
+
+  const startRecording = useCallback(async () => {
+    if (!permissionReady) {
+      Alert.alert('麦克风未就绪', '请稍候或检查麦克风权限。');
+      return;
+    }
+
+    setAssistantReply(null);
+    setUserText(null);
+    setPendingConfirm(null);
+
+    await audioRecorder.prepareToRecordAsync();
+    audioRecorder.record();
+    recordingStartedAtRef.current = Date.now();
+    setVoiceState('listening');
+  }, [audioRecorder, permissionReady]);
+
+  const stopRecording = useCallback(async () => {
+    const startedAt = recordingStartedAtRef.current;
+    if (startedAt != null && Date.now() - startedAt < 1200) {
+      Alert.alert('录音太短', '请按住麦克风至少 1～2 秒，清晰说完再松开。');
+      return;
+    }
+
+    await audioRecorder.stop();
+    recordingStartedAtRef.current = null;
+    const uri = audioRecorder.uri;
+    if (!uri) {
+      setVoiceState('idle');
+      Alert.alert('录音失败', '未获取到音频文件，请重试。');
+      return;
+    }
+    await processRecording(uri);
+  }, [audioRecorder, processRecording]);
+
+  const toggleListening = useCallback(async () => {
+    if (voiceState === 'processing') {
+      return;
+    }
+    if (voiceState === 'listening' || recorderState.isRecording) {
+      await stopRecording();
+      return;
+    }
+    await startRecording();
+  }, [voiceState, recorderState.isRecording, startRecording, stopRecording]);
+
+  const handleConfirm = useCallback(async () => {
+    if (!accessToken || !pendingConfirm) {
+      return;
+    }
+
+    setVoiceState('processing');
+    try {
+      const data = await confirmAssistantApi(accessToken, {
+        groupId: groupIdRef.current,
+        messageId: pendingConfirm.messageId,
+        action: 'confirm',
+        scheduleDraft: pendingConfirm.scheduleDraft,
+      });
+      setAssistantReply(data.reply);
+      setPendingConfirm(null);
+      onScheduleCreated?.();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '创建日程失败';
+      Alert.alert('确认失败', message);
+    } finally {
+      setVoiceState('idle');
+    }
+  }, [accessToken, onScheduleCreated, pendingConfirm]);
+
+  const handleCancel = useCallback(async () => {
+    if (!accessToken || !pendingConfirm) {
+      setPendingConfirm(null);
+      return;
+    }
+
+    setVoiceState('processing');
+    try {
+      const data = await confirmAssistantApi(accessToken, {
+        groupId: groupIdRef.current,
+        messageId: pendingConfirm.messageId,
+        action: 'cancel',
+      });
+      setAssistantReply(data.reply);
+      setPendingConfirm(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '操作失败';
+      Alert.alert('君听', message);
+    } finally {
+      setVoiceState('idle');
+    }
+  }, [accessToken, pendingConfirm]);
+
+  const isListening = voiceState === 'listening' || recorderState.isRecording;
+  const isProcessing = voiceState === 'processing';
+
+  const confirmCopy = pendingConfirm ? getConfirmCopy(pendingConfirm.intent) : null;
+
+  const statusText = isProcessing
+    ? '正在思考...'
+    : isListening
+      ? '我在听，请说...'
+      : pendingConfirm && confirmCopy
+        ? confirmCopy.status
+        : '点击麦克风，告诉我你的安排';
+
+  const actionText = isProcessing
+    ? '请稍候'
+    : isListening
+      ? '再次点击结束'
+      : pendingConfirm && confirmCopy
+        ? confirmCopy.action
+        : '支持创建、查询、修改与删除日程';
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdropOpacity.value,
@@ -84,15 +346,8 @@ export default function AssistantChatOverlay({ onClose }: AssistantChatOverlayPr
 
   const micRingStyle = useAnimatedStyle(() => ({
     transform: [{ scale: micPulse.value }],
-    opacity: voiceState === 'listening' ? 0.35 : 0,
+    opacity: isListening ? 0.35 : 0,
   }));
-
-  const toggleListening = () => {
-    setVoiceState((prev) => (prev === 'idle' ? 'listening' : 'idle'));
-  };
-
-  const statusText = voiceState === 'listening' ? '我在听，请说...' : '点击麦克风，告诉我你的安排';
-  const actionText = voiceState === 'listening' ? '再次点击结束' : '支持创建、查询与修改日程';
 
   return (
     <View style={styles.root} pointerEvents="box-none">
@@ -124,28 +379,89 @@ export default function AssistantChatOverlay({ onClose }: AssistantChatOverlayPr
               </View>
             </View>
 
+            {userText ? (
+              <View style={styles.userBubble}>
+                <Text style={styles.userBubbleText}>{userText}</Text>
+              </View>
+            ) : null}
+
+            {assistantReply ? (
+              <View style={styles.replyBubble}>
+                <Text style={styles.replyText}>{assistantReply}</Text>
+              </View>
+            ) : null}
+
+            {pendingConfirm ? (
+              <View
+                style={[
+                  styles.confirmCard,
+                  confirmCopy?.destructive && styles.confirmCardDanger,
+                ]}
+              >
+                <Text style={styles.confirmTitle}>{pendingConfirm.scheduleDraft.title}</Text>
+                {pendingConfirm.intent === 'delete_schedule' ? (
+                  <Text style={styles.confirmWarning}>此操作不可撤销</Text>
+                ) : (
+                  <Text style={styles.confirmTime}>
+                    {formatDraftTime(pendingConfirm.scheduleDraft.startTime)}
+                    {' - '}
+                    {formatDraftTime(pendingConfirm.scheduleDraft.endTime)}
+                  </Text>
+                )}
+                <View style={styles.confirmActions}>
+                  <Pressable
+                    style={[styles.confirmButton, styles.cancelButton]}
+                    onPress={handleCancel}
+                    disabled={isProcessing}
+                  >
+                    <Text style={styles.cancelButtonText}>取消</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.confirmButton,
+                      confirmCopy?.destructive ? styles.deleteButton : styles.createButton,
+                    ]}
+                    onPress={handleConfirm}
+                    disabled={isProcessing}
+                  >
+                    <Text style={styles.createButtonText}>
+                      {confirmCopy?.confirmLabel ?? '确认'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
             <Text style={styles.statusText}>{statusText}</Text>
 
             <View style={styles.waveformWrap}>
-              <VoiceWaveform active={voiceState === 'listening'} size="large" />
+              {isProcessing ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <VoiceWaveform active={isListening} size="large" />
+              )}
             </View>
 
-            <View style={styles.hintBubble}>
-              <Text style={styles.hintLabel}>试试说</Text>
-              <Text style={styles.hintText}>「{HINTS[hintIndex]}」</Text>
-            </View>
+            {!pendingConfirm && !userText ? (
+              <View style={styles.hintBubble}>
+                <Text style={styles.hintLabel}>试试说</Text>
+                <Text style={styles.hintText}>「{HINTS[hintIndex]}」</Text>
+              </View>
+            ) : null}
 
             <View style={styles.micArea}>
               <Animated.View style={[styles.micRing, micRingStyle]} />
               <Pressable
                 style={[
                   styles.micButton,
-                  voiceState === 'listening' && styles.micButtonActive,
+                  isListening && styles.micButtonActive,
+                  isProcessing && styles.micButtonDisabled,
                 ]}
                 onPress={toggleListening}
+                disabled={isProcessing}
               >
                 <Ionicons
-                  name={voiceState === 'listening' ? 'mic' : 'mic-outline'}
+                  name={isListening ? 'mic' : 'mic-outline'}
                   size={30}
                   color="#FFFFFF"
                 />
@@ -212,7 +528,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'stretch',
     gap: spacing.sm,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   agentInfo: {
     flex: 1,
@@ -227,6 +543,94 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 13,
     color: colors.textSecondary,
+  },
+  userBubble: {
+    alignSelf: 'stretch',
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  userBubbleText: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.text,
+  },
+  replyBubble: {
+    alignSelf: 'stretch',
+    backgroundColor: '#F8FAFC',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.25)',
+  },
+  replyText: {
+    fontFamily: fonts.body,
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+  },
+  confirmCard: {
+    alignSelf: 'stretch',
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(79, 124, 255, 0.25)',
+  },
+  confirmCardDanger: {
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  confirmTitle: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 16,
+    color: colors.text,
+  },
+  confirmTime: {
+    marginTop: 4,
+    fontFamily: fonts.body,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  confirmWarning: {
+    marginTop: 4,
+    fontFamily: fonts.body,
+    fontSize: 13,
+    color: '#DC2626',
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  confirmButton: {
+    flex: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F1F5F9',
+  },
+  createButton: {
+    backgroundColor: colors.primary,
+  },
+  deleteButton: {
+    backgroundColor: '#DC2626',
+  },
+  cancelButtonText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  createButtonText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: '#FFFFFF',
   },
   statusText: {
     fontFamily: fonts.bodySemiBold,
@@ -247,10 +651,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     alignItems: 'center',
+    marginBottom: spacing.sm,
   },
   hintLabel: {
     fontFamily: fonts.body,
-    fontSize: 12,
+    fontSize:  12,
     color: colors.textSecondary,
   },
   hintText: {
@@ -289,6 +694,9 @@ const styles = StyleSheet.create({
   },
   micButtonActive: {
     backgroundColor: colors.primaryDark,
+  },
+  micButtonDisabled: {
+    opacity: 0.55,
   },
   actionText: {
     marginTop: spacing.md,

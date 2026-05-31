@@ -16,3 +16,14 @@ export async function applyRefreshedToken(response: Response) {
 
   await tokenRefreshHandler(refreshedToken);
 }
+
+export async function applyRefreshedTokenFromHeaders(headers: Record<string, string>) {
+  const refreshedToken =
+    headers[REFRESHED_TOKEN_HEADER] ??
+    headers[REFRESHED_TOKEN_HEADER.toLowerCase()];
+  if (!refreshedToken || !tokenRefreshHandler) {
+    return;
+  }
+
+  await tokenRefreshHandler(refreshedToken);
+}

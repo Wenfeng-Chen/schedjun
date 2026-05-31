@@ -31,6 +31,7 @@ public class ScheduleService {
 
     private static final String DEFAULT_TIMEZONE = "Asia/Shanghai";
     private static final String DEFAULT_SOURCE = "manual";
+    private static final String VOICE_SOURCE = "voice";
     private static final int MAX_SCROLL_LIMIT = 50;
     private static final DateTimeFormatter CURSOR_TIME_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
@@ -45,6 +46,15 @@ public class ScheduleService {
 
     @Transactional
     public ScheduleVO create(CreateScheduleDTO dto) {
+        return createInternal(dto, DEFAULT_SOURCE);
+    }
+
+    @Transactional
+    public ScheduleVO createFromVoice(CreateScheduleDTO dto) {
+        return createInternal(dto, VOICE_SOURCE);
+    }
+
+    private ScheduleVO createInternal(CreateScheduleDTO dto, String source) {
         Long userId = BaseContext.getCurrentId();
         if (userId == null) {
             throw new IllegalArgumentException("未登录");
@@ -59,11 +69,12 @@ public class ScheduleService {
             throw new IllegalArgumentException("用户不存在");
         }
 
+        ZoneId zoneId = ZoneId.of(resolveTimezone(user));
         LocalDateTime now = LocalDateTime.now();
         Schedule schedule = new Schedule();
         schedule.setUserId(userId);
-        applyScheduleFields(schedule, dto);
-        schedule.setSource(DEFAULT_SOURCE);
+        applyScheduleFields(schedule, dto, zoneId);
+        schedule.setSource(source);
         schedule.setCreatedAt(now);
         schedule.setUpdatedAt(now);
         scheduleMapper.insert(schedule);
@@ -90,7 +101,8 @@ public class ScheduleService {
         }
 
         Schedule schedule = requireOwnedSchedule(userId, scheduleId);
-        applyScheduleFields(schedule, dto);
+        ZoneId zoneId = ZoneId.of(resolveTimezone(user));
+        applyScheduleFields(schedule, dto, zoneId);
         schedule.setUpdatedAt(LocalDateTime.now());
         scheduleMapper.updateById(schedule);
 
@@ -147,6 +159,30 @@ public class ScheduleService {
                 : null;
 
         return new ScheduleScrollVO(records, hasMore, nextCursor);
+    }
+
+    public List<ScheduleVO> listForAssistantContext(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+
+        ZoneId zoneId = ZoneId.of(resolveTimezone(user));
+        LocalDate today = LocalDate.now(zoneId);
+
+        LambdaQueryWrapper<Schedule> query = buildListQuery(
+                userId,
+                today.minusDays(7).toString(),
+                today.plusDays(60).toString(),
+                null
+        );
+        query.orderByAsc(Schedule::getStartTime)
+                .orderByAsc(Schedule::getId)
+                .last("LIMIT 30");
+
+        return scheduleMapper.selectList(query).stream()
+                .map(schedule -> toScheduleVO(schedule, resolveTimezone(user)))
+                .toList();
     }
 
     private void applyCursorFilter(LambdaQueryWrapper<Schedule> wrapper, String cursor) {
@@ -224,10 +260,10 @@ public class ScheduleService {
         }
     }
 
-    private void applyScheduleFields(Schedule schedule, CreateScheduleDTO dto) {
+    private void applyScheduleFields(Schedule schedule, CreateScheduleDTO dto, ZoneId zoneId) {
         schedule.setTitle(dto.getTitle().trim());
-        schedule.setStartTime(toLocalDateTime(dto.getStartTime()));
-        schedule.setEndTime(toLocalDateTime(dto.getEndTime()));
+        schedule.setStartTime(toLocalDateTime(dto.getStartTime(), zoneId));
+        schedule.setEndTime(toLocalDateTime(dto.getEndTime(), zoneId));
         schedule.setNotes(normalizeNotes(dto.getNotes()));
         schedule.setRepeatJson(toJson(normalizeRepeat(dto.getRepeat())));
         schedule.setReminderJson(toJson(normalizeReminder(dto.getReminder())));
@@ -263,8 +299,8 @@ public class ScheduleService {
         return user.getTimezone() != null ? user.getTimezone() : DEFAULT_TIMEZONE;
     }
 
-    private LocalDateTime toLocalDateTime(OffsetDateTime dateTime) {
-        return dateTime.toLocalDateTime();
+    private LocalDateTime toLocalDateTime(OffsetDateTime dateTime, ZoneId zoneId) {
+        return dateTime.atZoneSameInstant(zoneId).toLocalDateTime();
     }
 
     private String formatDateTime(LocalDateTime dateTime, ZoneId zoneId) {

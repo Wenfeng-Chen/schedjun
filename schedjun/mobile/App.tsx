@@ -240,7 +240,7 @@ function MainApp() {
           onClose={handleCloseCreate}
           onSave={handleSaveEvent}
         />
-        <FloatingAssistant />
+        <FloatingAssistant onScheduleCreated={loadSchedules} />
       </>
     );
   }
@@ -254,7 +254,7 @@ function MainApp() {
           onClose={handleCloseEdit}
           onSave={handleSaveEdit}
         />
-        <FloatingAssistant />
+        <FloatingAssistant onScheduleCreated={loadSchedules} />
       </>
     );
   }
@@ -320,7 +320,7 @@ function MainApp() {
         />
       )}
 
-      <FloatingAssistant />
+      <FloatingAssistant onScheduleCreated={loadSchedules} />
     </>
   );
 }
