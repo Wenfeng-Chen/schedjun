@@ -25,6 +25,16 @@ public class GlobalExceptionHandler {
         return Result.error(ex.getMessage());
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public Result<Void> handleIllegalState(IllegalStateException ex) {
+        String message = ex.getMessage();
+        if (message != null && (message.startsWith("语音识别") || message.startsWith("AI ") || message.startsWith("讯飞"))) {
+            return Result.error(message);
+        }
+        log.error("Unhandled illegal state", ex);
+        return Result.error("服务器内部错误");
+    }
+
     @ExceptionHandler(Exception.class)
     public Result<Void> handleException(Exception ex) {
         log.error("Unhandled exception", ex);

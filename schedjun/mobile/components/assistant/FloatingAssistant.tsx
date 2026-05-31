@@ -25,7 +25,11 @@ const BUBBLE_TOP_OVERFLOW = 38;
 const LONG_PRESS_MS = 320;
 const EDGE_MARGIN = 12;
 
-export default function FloatingAssistant() {
+interface FloatingAssistantProps {
+  onScheduleCreated?: () => void;
+}
+
+export default function FloatingAssistant({ onScheduleCreated }: FloatingAssistantProps) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
@@ -187,7 +191,10 @@ export default function FloatingAssistant() {
           statusBarTranslucent
           onRequestClose={() => setChatOpen(false)}
         >
-          <AssistantChatOverlay onClose={() => setChatOpen(false)} />
+          <AssistantChatOverlay
+            onClose={() => setChatOpen(false)}
+            onScheduleCreated={onScheduleCreated}
+          />
         </Modal>
       )}
 
