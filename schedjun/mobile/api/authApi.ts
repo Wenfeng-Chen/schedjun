@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../constants/apiConfig';
+import { API_BASE_URL, getApiConnectionHint } from '../constants/apiConfig';
 
 export interface ApiResult<T> {
   code: number;
@@ -23,8 +23,9 @@ async function postJson<T>(path: string, body: unknown): Promise<ApiResult<T>> {
       },
       body: JSON.stringify(body),
     });
-  } catch {
-    throw new Error('无法连接服务器，请确认后端已启动且手机与电脑在同一网络');
+  } catch (error) {
+    console.error('[api] request failed:', API_BASE_URL, error);
+    throw new Error(`无法连接服务器（${API_BASE_URL}）。${getApiConnectionHint()}`);
   }
 
   if (!response.ok) {
@@ -43,5 +44,10 @@ function unwrapResult<T>(result: ApiResult<T>): T {
 
 export async function registerApi(username: string, password: string): Promise<AuthResponseData> {
   const result = await postJson<AuthResponseData>('/auth/register', { username, password });
+  return unwrapResult(result);
+}
+
+export async function loginApi(username: string, password: string): Promise<AuthResponseData> {
+  const result = await postJson<AuthResponseData>('/auth/login', { username, password });
   return unwrapResult(result);
 }

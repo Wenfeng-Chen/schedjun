@@ -44,7 +44,7 @@ export default function AuthScreen({ mode, onClose, onSwitchMode }: AuthScreenPr
     try {
       const error = isRegister
         ? await register({ username, password, confirmPassword })
-        : login({ username, password });
+        : await login({ username, password });
 
       if (error) {
         Alert.alert('提示', error);

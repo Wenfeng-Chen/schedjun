@@ -1,6 +1,7 @@
 package com.schedjun.backend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.schedjun.backend.common.dto.LoginDTO;
 import com.schedjun.backend.common.dto.RegisterDTO;
 import com.schedjun.backend.common.entity.User;
 import com.schedjun.backend.common.properties.JwtProperties;
@@ -47,6 +48,21 @@ public class AuthService {
         user.setUpdatedAt(now);
         userMapper.insert(user);
 
+        return buildAuthVO(user);
+    }
+
+    public AuthVO login(LoginDTO dto) {
+        User user = userMapper.selectOne(
+                new LambdaQueryWrapper<User>().eq(User::getUsername, dto.getUsername())
+        );
+        if (user == null || !passwordEncoder.matches(dto.getPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("用户名或密码错误");
+        }
+
+        return buildAuthVO(user);
+    }
+
+    private AuthVO buildAuthVO(User user) {
         String accessToken = jwtUtils.generateToken(user.getId(), user.getUsername());
         return new AuthVO(formatUserId(user.getId()), accessToken, jwtProperties.getExpiresIn());
     }
