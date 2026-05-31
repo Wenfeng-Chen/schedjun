@@ -24,8 +24,11 @@ import {
 interface MyScheduleScreenProps {
   schedules: ScheduleItem[];
   onSchedulesChange: (schedules: ScheduleItem[]) => void;
-  onBack: () => void;
+  onBack?: () => void;
+  onAddPress?: () => void;
   onSchedulePress: (scheduleId: string) => void;
+  embedded?: boolean;
+  bottomInset?: number;
 }
 
 function SelectionCheckbox({ selected }: { selected: boolean }) {
@@ -93,7 +96,10 @@ export default function MyScheduleScreen({
   schedules,
   onSchedulesChange,
   onBack,
+  onAddPress,
   onSchedulePress,
+  embedded = false,
+  bottomInset = 0,
 }: MyScheduleScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [selectionMode, setSelectionMode] = useState(false);
@@ -184,46 +190,77 @@ export default function MyScheduleScreen({
       exitSelectionMode();
       return;
     }
-    onBack();
+    onBack?.();
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <View style={styles.headerBar}>
-          <Pressable style={styles.headerButton} onPress={handleBack} hitSlop={8}>
-            <Ionicons
-              name={selectionMode ? 'close' : 'chevron-back'}
-              size={selectionMode ? 24 : 24}
-              color={colors.text}
+    <SafeAreaView style={styles.container} edges={embedded ? ['top'] : ['top', 'bottom']}>
+      <View style={[styles.header, embedded && styles.headerEmbedded]}>
+        {embedded ? (
+          <View style={styles.titleRow}>
+            {selectionMode ? (
+              <>
+                <Pressable style={styles.headerButton} onPress={handleBack} hitSlop={8}>
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </Pressable>
+                <Text style={styles.selectionTitle}>已选择{selectedCount}项</Text>
+                <Pressable style={styles.headerButton} onPress={handleSelectAll} hitSlop={8}>
+                  <Ionicons
+                    name={allSelected ? 'checkbox' : 'checkbox-outline'}
+                    size={22}
+                    color={colors.text}
+                  />
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.embeddedTitle}>日程</Text>
+                <Pressable style={styles.headerButton} onPress={onAddPress} hitSlop={8}>
+                  <Ionicons name="add" size={30} color={colors.text} />
+                </Pressable>
+              </>
+            )}
+          </View>
+        ) : (
+          <>
+            <View style={styles.headerBar}>
+              <Pressable style={styles.headerButton} onPress={handleBack} hitSlop={8}>
+                <Ionicons
+                  name={selectionMode ? 'close' : 'chevron-back'}
+                  size={24}
+                  color={colors.text}
+                />
+              </Pressable>
+
+              {selectionMode && (
+                <Pressable style={styles.headerButton} onPress={handleSelectAll} hitSlop={8}>
+                  <Ionicons
+                    name={allSelected ? 'checkbox' : 'checkbox-outline'}
+                    size={22}
+                    color={colors.text}
+                  />
+                </Pressable>
+              )}
+            </View>
+
+            <Text style={styles.pageTitle}>
+              {selectionMode ? `已选择${selectedCount}项` : '搜索日程'}
+            </Text>
+          </>
+        )}
+
+        {!selectionMode && (
+          <View style={styles.searchBar}>
+            <Ionicons name="search" size={18} color={colors.textMuted} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="搜索日程"
+              placeholderTextColor={colors.textMuted}
+              value={searchText}
+              onChangeText={setSearchText}
             />
-          </Pressable>
-
-          {selectionMode && (
-            <Pressable style={styles.headerButton} onPress={handleSelectAll} hitSlop={8}>
-              <Ionicons
-                name={allSelected ? 'checkbox' : 'checkbox-outline'}
-                size={22}
-                color={colors.text}
-              />
-            </Pressable>
-          )}
-        </View>
-
-        <Text style={styles.pageTitle}>
-          {selectionMode ? `已选择${selectedCount}项` : '搜索日程'}
-        </Text>
-
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={18} color={colors.textMuted} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="搜索日程"
-            placeholderTextColor={colors.textMuted}
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-        </View>
+          </View>
+        )}
       </View>
 
       <SectionList
@@ -232,11 +269,14 @@ export default function MyScheduleScreen({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.listContent,
+          { paddingBottom: bottomInset + spacing.xl },
           selectionMode && selectedCount > 0 && styles.listContentWithFooter,
         ]}
         stickySectionHeadersEnabled={false}
         renderSectionHeader={({ section }) => (
-          <Text style={styles.sectionTitle}>{section.title}</Text>
+          <Text style={[styles.sectionTitle, embedded && styles.sectionTitleEmbedded]}>
+            {section.title}
+          </Text>
         )}
         renderItem={({ item }) => (
           <DayCard
@@ -278,6 +318,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
   },
+  headerEmbedded: {
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 40,
+    marginBottom: spacing.sm,
+  },
+  embeddedTitle: {
+    flex: 1,
+    fontFamily: fonts.display,
+    fontSize: 28,
+    color: colors.text,
+    letterSpacing: 0.5,
+  },
+  selectionTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 17,
+    color: colors.text,
+  },
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -304,7 +369,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radius.full,
     paddingHorizontal: spacing.md,
-    height: 44,
+    height: 40,
     gap: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
@@ -330,12 +395,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
+  sectionTitleEmbedded: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
   dayCard: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    marginBottom: spacing.sm,
-    paddingVertical: spacing.md,
+    marginBottom: spacing.xs + 2,
+    paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.md,
     borderWidth: 1,
     borderColor: colors.cardBorder,

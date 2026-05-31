@@ -9,23 +9,31 @@ import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import FloatingAssistant from './components/assistant/FloatingAssistant';
 import CalendarView from './components/calendar/CalendarView';
 import CreateEventScreen, { EventFormData } from './components/event/CreateEventScreen';
 import EditEventScreen, { EditEventFormData } from './components/event/EditEventScreen';
+import BottomTabBar, { MainTab, TAB_BAR_HEIGHT } from './components/navigation/BottomTabBar';
+import MineScreen from './components/profile/MineScreen';
 import MyScheduleScreen from './components/schedule/MyScheduleScreen';
 import ScheduleDetailScreen from './components/schedule/ScheduleDetailScreen';
+import { AuthProvider } from './context/AuthContext';
 import { MOCK_SCHEDULES } from './constants/mockSchedules';
 import { ScheduleItem } from './constants/scheduleTypes';
-import { colors } from './constants/theme';
+import { colors, spacing } from './constants/theme';
 import { formDataToSchedule, scheduleToFormData } from './utils/scheduleDetailUtils';
 
-type AppScreen = 'home' | 'createEvent' | 'mySchedule' | 'editEvent';
+type OverlayScreen = 'createEvent' | 'editEvent' | null;
 
-export default function App() {
-  const [screen, setScreen] = useState<AppScreen>('home');
+function MainApp() {
+  const insets = useSafeAreaInsets();
+  const tabBarInset = TAB_BAR_HEIGHT + Math.max(insets.bottom, spacing.sm);
+
+  const [activeTab, setActiveTab] = useState<MainTab>('calendar');
+  const [overlayScreen, setOverlayScreen] = useState<OverlayScreen>(null);
+  const [returnTab, setReturnTab] = useState<MainTab>('calendar');
   const [createEventDate, setCreateEventDate] = useState<Date>(() => new Date());
   const [schedules, setSchedules] = useState<ScheduleItem[]>(() =>
     MOCK_SCHEDULES.map((item) => ({
@@ -36,14 +44,6 @@ export default function App() {
   );
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
-  const [returnScreen, setReturnScreen] = useState<AppScreen>('home');
-
-  const [fontsLoaded] = useFonts({
-    NotoSerifSC_700Bold,
-    PlusJakartaSans_500Medium,
-    PlusJakartaSans_600SemiBold,
-    PlusJakartaSans_700Bold,
-  });
 
   const selectedSchedule = useMemo(
     () => schedules.find((item) => item.id === selectedScheduleId) ?? null,
@@ -55,13 +55,26 @@ export default function App() {
     [schedules, editingScheduleId],
   );
 
-  const handleAddPress = (selectedDate: Date) => {
-    setCreateEventDate(selectedDate);
-    setScreen('createEvent');
-  };
+  const openCreateEvent = useCallback((date: Date, fromTab: MainTab = activeTab) => {
+    setCreateEventDate(date);
+    setReturnTab(fromTab);
+    setOverlayScreen('createEvent');
+  }, [activeTab]);
+
+  const handleCalendarAddPress = useCallback(
+    (selectedDate: Date) => {
+      openCreateEvent(selectedDate, 'calendar');
+    },
+    [openCreateEvent],
+  );
+
+  const handleScheduleAddPress = useCallback(() => {
+    openCreateEvent(new Date(), 'schedules');
+  }, [openCreateEvent]);
 
   const handleSaveEvent = (_data: EventFormData) => {
-    // 后续 PR 接入日程存储
+    setOverlayScreen(null);
+    setActiveTab(returnTab);
   };
 
   const openScheduleDetail = useCallback((scheduleId: string) => {
@@ -76,10 +89,10 @@ export default function App() {
     if (!selectedScheduleId) {
       return;
     }
-    setReturnScreen(screen);
+    setReturnTab(activeTab);
     setEditingScheduleId(selectedScheduleId);
-    setScreen('editEvent');
-  }, [selectedScheduleId, screen]);
+    setOverlayScreen('editEvent');
+  }, [selectedScheduleId, activeTab]);
 
   const handleDeleteSchedule = useCallback(() => {
     if (!selectedScheduleId) {
@@ -99,16 +112,122 @@ export default function App() {
           item.id === editingScheduleId ? formDataToSchedule(editingScheduleId, data) : item,
         ),
       );
-      setScreen(returnScreen);
+      setOverlayScreen(null);
+      setActiveTab(returnTab);
       setEditingScheduleId(null);
     },
-    [editingScheduleId, returnScreen],
+    [editingScheduleId, returnTab],
   );
 
   const handleCloseEdit = useCallback(() => {
     setEditingScheduleId(null);
-    setScreen(returnScreen);
-  }, [returnScreen]);
+    setOverlayScreen(null);
+    setActiveTab(returnTab);
+  }, [returnTab]);
+
+  const handleCloseCreate = useCallback(() => {
+    setOverlayScreen(null);
+    setActiveTab(returnTab);
+  }, [returnTab]);
+
+  if (overlayScreen === 'createEvent') {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <CreateEventScreen
+          initialDate={createEventDate}
+          onClose={handleCloseCreate}
+          onSave={handleSaveEvent}
+        />
+        <FloatingAssistant />
+      </>
+    );
+  }
+
+  if (overlayScreen === 'editEvent' && editingSchedule) {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <EditEventScreen
+          initialData={scheduleToFormData(editingSchedule)}
+          onClose={handleCloseEdit}
+          onSave={handleSaveEdit}
+        />
+        <FloatingAssistant />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <StatusBar style="dark" />
+      <View style={styles.main}>
+        {activeTab === 'calendar' && (
+          <LinearGradient
+            colors={[colors.backgroundWarm, colors.backgroundCool]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gradient}
+          >
+            <SafeAreaView style={styles.container} edges={['top']}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[
+                  styles.scrollContent,
+                  { paddingBottom: tabBarInset + spacing.sm },
+                ]}
+              >
+                <CalendarView
+                  schedules={schedules}
+                  onAddPress={handleCalendarAddPress}
+                  onSchedulePress={openScheduleDetail}
+                />
+              </ScrollView>
+            </SafeAreaView>
+          </LinearGradient>
+        )}
+
+        {activeTab === 'schedules' && (
+          <MyScheduleScreen
+            embedded
+            schedules={schedules}
+            onSchedulesChange={setSchedules}
+            onAddPress={handleScheduleAddPress}
+            onSchedulePress={openScheduleDetail}
+            bottomInset={tabBarInset}
+          />
+        )}
+
+        {activeTab === 'mine' && (
+          <MineScreen scheduleCount={schedules.length} bottomInset={tabBarInset} />
+        )}
+
+        <View style={styles.tabBarWrap}>
+          <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+        </View>
+      </View>
+
+      {selectedSchedule && (
+        <ScheduleDetailScreen
+          schedule={selectedSchedule}
+          onClose={closeScheduleDetail}
+          onEdit={openScheduleEdit}
+          onDelete={handleDeleteSchedule}
+        />
+      )}
+
+      <FloatingAssistant />
+    </>
+  );
+}
+
+export default function App() {
+  const [fontsLoaded] = useFonts({
+    NotoSerifSC_700Bold,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+  });
 
   if (!fontsLoaded) {
     return (
@@ -118,106 +237,17 @@ export default function App() {
     );
   }
 
-  const assistantOverlay = <FloatingAssistant />;
-
-  if (screen === 'createEvent') {
-    return (
-      <SafeAreaProvider>
-        <View style={styles.root}>
-          <StatusBar style="dark" />
-          <CreateEventScreen
-            initialDate={createEventDate}
-            onClose={() => setScreen('home')}
-            onSave={handleSaveEvent}
-          />
-          {assistantOverlay}
-        </View>
-      </SafeAreaProvider>
-    );
-  }
-
-  if (screen === 'editEvent' && editingSchedule) {
-    return (
-      <SafeAreaProvider>
-        <View style={styles.root}>
-          <StatusBar style="dark" />
-          <EditEventScreen
-            initialData={scheduleToFormData(editingSchedule)}
-            onClose={handleCloseEdit}
-            onSave={handleSaveEdit}
-          />
-          {assistantOverlay}
-        </View>
-      </SafeAreaProvider>
-    );
-  }
-
-  if (screen === 'mySchedule') {
-    return (
-      <SafeAreaProvider>
-        <View style={styles.root}>
-          <StatusBar style="dark" />
-          <MyScheduleScreen
-            schedules={schedules}
-            onSchedulesChange={setSchedules}
-            onBack={() => setScreen('home')}
-            onSchedulePress={openScheduleDetail}
-          />
-          {selectedSchedule && (
-            <ScheduleDetailScreen
-              schedule={selectedSchedule}
-              onClose={closeScheduleDetail}
-              onEdit={openScheduleEdit}
-              onDelete={handleDeleteSchedule}
-            />
-          )}
-          {assistantOverlay}
-        </View>
-      </SafeAreaProvider>
-    );
-  }
-
   return (
     <SafeAreaProvider>
-      <View style={styles.root}>
-        <LinearGradient
-        colors={[colors.backgroundWarm, colors.backgroundCool]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.gradient}
-      >
-        <SafeAreaView style={styles.container} edges={['top']}>
-          <StatusBar style="dark" />
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-          >
-            <CalendarView
-              schedules={schedules}
-              onAddPress={handleAddPress}
-              onMySchedulePress={() => setScreen('mySchedule')}
-              onSchedulePress={openScheduleDetail}
-            />
-          </ScrollView>
-        </SafeAreaView>
-      </LinearGradient>
-
-      {selectedSchedule && screen === 'home' && (
-        <ScheduleDetailScreen
-          schedule={selectedSchedule}
-          onClose={closeScheduleDetail}
-          onEdit={openScheduleEdit}
-          onDelete={handleDeleteSchedule}
-        />
-      )}
-      {assistantOverlay}
-      </View>
+      <AuthProvider>
+        <MainApp />
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  main: {
     flex: 1,
   },
   gradient: {
@@ -228,7 +258,12 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: 8,
-    paddingBottom: 32,
+  },
+  tabBarWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   loading: {
     flex: 1,

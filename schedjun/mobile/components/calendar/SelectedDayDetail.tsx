@@ -21,14 +21,9 @@ export default function SelectedDayDetail({
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.mainDate}>{formatted.main}</Text>
-          <Text style={styles.subDate}>
-            {formatted.weekday} · {formatted.year}
-          </Text>
-        </View>
-      </View>
+      <Text style={styles.dateLine}>
+        {formatted.main} · {formatted.weekday} · {formatted.year}
+      </Text>
 
       {schedules.length === 0 ? (
         <View style={styles.emptyCard}>
@@ -64,30 +59,18 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing.xs,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md,
-  },
-  mainDate: {
-    fontFamily: fonts.display,
-    fontSize: 26,
+  dateLine: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 16,
     color: colors.text,
-    letterSpacing: 0.5,
-  },
-  subDate: {
-    marginTop: 4,
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   emptyCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
     shadowColor: colors.shadow,
@@ -102,7 +85,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   emptyHint: {
-    marginTop: 6,
+    marginTop: 4,
     fontFamily: fonts.body,
     fontSize: 13,
     color: colors.textMuted,
@@ -123,7 +106,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm + 2,
   },
   scheduleRowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
