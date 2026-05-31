@@ -1,5 +1,6 @@
 package com.schedjun.backend.controller;
 
+import com.schedjun.backend.common.dto.LoginDTO;
 import com.schedjun.backend.common.dto.RegisterDTO;
 import com.schedjun.backend.common.result.Result;
 import com.schedjun.backend.common.vo.AuthVO;
@@ -21,5 +22,10 @@ public class AuthController {
     @PostMapping("/register")
     public Result<AuthVO> register(@Valid @RequestBody RegisterDTO dto) {
         return Result.success(authService.register(dto));
+    }
+
+    @PostMapping("/login")
+    public Result<AuthVO> login(@Valid @RequestBody LoginDTO dto) {
+        return Result.success(authService.login(dto));
     }
 }

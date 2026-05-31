@@ -1,25 +1,48 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
-import { registerApi } from '../api/authApi';
+import { loginApi, registerApi } from '../api/authApi';
 import { AuthCredentials, RegisterPayload, User } from '../constants/userTypes';
 
 interface AuthContextValue {
   user: User | null;
   accessToken: string | null;
   isLoggedIn: boolean;
-  login: (credentials: AuthCredentials) => string | null;
+  login: (credentials: AuthCredentials) => Promise<string | null>;
   register: (payload: RegisterPayload) => Promise<string | null>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function applyAuthResult(
+  data: { userId: string; accessToken: string },
+  username: string,
+  setUser: (user: User) => void,
+  setAccessToken: (token: string) => void,
+) {
+  setUser({ id: data.userId, username });
+  setAccessToken(data.accessToken);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
-  const login = useCallback((credentials: AuthCredentials) => {
-    return '登录功能暂未开放，请先测试注册';
+  const login = useCallback(async (credentials: AuthCredentials) => {
+    const trimmedUsername = credentials.username.trim();
+    const password = credentials.password;
+
+    if (!trimmedUsername || !password) {
+      return '请输入用户名和密码';
+    }
+
+    try {
+      const data = await loginApi(trimmedUsername, password);
+      applyAuthResult(data, trimmedUsername, setUser, setAccessToken);
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : '登录失败';
+    }
   }, []);
 
   const register = useCallback(async (payload: RegisterPayload) => {
@@ -40,11 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const data = await registerApi(trimmedUsername, password);
-      setUser({
-        id: data.userId,
-        username: trimmedUsername,
-      });
-      setAccessToken(data.accessToken);
+      applyAuthResult(data, trimmedUsername, setUser, setAccessToken);
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : '注册失败';

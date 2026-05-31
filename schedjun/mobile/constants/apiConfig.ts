@@ -1,20 +1,20 @@
 import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
 /**
- * 手动指定 API 地址时填写，例如 '192.168.1.100'
- * 留空则优先从 Expo 调试地址自动解析电脑 IP
+ * 真机连不上时，填电脑局域网 IP，例如 '192.168.1.100'
+ * 留空则优先从 Expo 调试地址自动解析
  */
 const MANUAL_API_HOST = '';
 
-function parseHostFromDebugger(value: string | undefined): string | null {
+function parseHostFromDebugger(value: string | undefined | null): string | null {
   if (!value) {
     return null;
   }
 
-  const host = value.includes('://')
-    ? value.split('://')[1]?.split(':')[0]
-    : value.split(':')[0];
+  const withoutScheme = value.includes('://') ? value.split('://')[1] : value;
+  const host = withoutScheme?.split(':')[0]?.split('/')[0];
 
   if (!host || host === 'localhost' || host === '127.0.0.1') {
     return null;
@@ -23,20 +23,37 @@ function parseHostFromDebugger(value: string | undefined): string | null {
   return host;
 }
 
+function getExpoDevHost(): string | null {
+  const legacyManifest = Constants.manifest as { debuggerHost?: string } | null;
+  const sources = [
+    Constants.expoGoConfig?.debuggerHost,
+    Constants.expoConfig?.hostUri,
+    Constants.linkingUri,
+    legacyManifest?.debuggerHost,
+  ];
+
+  for (const source of sources) {
+    const host = parseHostFromDebugger(source);
+    if (host) {
+      return host;
+    }
+  }
+
+  return null;
+}
+
 function resolveDevHost(): string {
   if (MANUAL_API_HOST) {
     return MANUAL_API_HOST;
   }
 
-  const expoConfig = Constants.expoConfig as { hostUri?: string } | null;
-  const autoHost = parseHostFromDebugger(Constants.expoGoConfig?.debuggerHost)
-    ?? parseHostFromDebugger(expoConfig?.hostUri);
-
+  const autoHost = getExpoDevHost();
   if (autoHost) {
     return autoHost;
   }
 
-  if (Platform.OS === 'android') {
+  // 仅 Android 模拟器使用 10.0.2.2 访问宿主机
+  if (Platform.OS === 'android' && !Device.isDevice) {
     return '10.0.2.2';
   }
 
@@ -45,6 +62,14 @@ function resolveDevHost(): string {
 
 export const API_BASE_URL = `http://${resolveDevHost()}:8080/api/v1`;
 
+export function getApiConnectionHint(): string {
+  if (Device.isDevice && !MANUAL_API_HOST && !getExpoDevHost()) {
+    return '请在 constants/apiConfig.ts 中设置 MANUAL_API_HOST 为电脑局域网 IP';
+  }
+  return '请确认后端已启动，且手机与电脑在同一 WiFi';
+}
+
 if (__DEV__) {
   console.log('[api] API_BASE_URL =', API_BASE_URL);
+  console.log('[api] isDevice =', Device.isDevice);
 }
