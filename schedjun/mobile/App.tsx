@@ -7,7 +7,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,8 +20,7 @@ import MineScreen from './components/profile/MineScreen';
 import MyScheduleScreen from './components/schedule/MyScheduleScreen';
 import ScheduleDetailScreen from './components/schedule/ScheduleDetailScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { createScheduleApi } from './api/scheduleApi';
-import { MOCK_SCHEDULES } from './constants/mockSchedules';
+import { createScheduleApi, listSchedulesApi } from './api/scheduleApi';
 import { ScheduleItem } from './constants/scheduleTypes';
 import { colors, spacing } from './constants/theme';
 import { formDataToSchedule, scheduleToFormData } from './utils/scheduleDetailUtils';
@@ -31,22 +30,93 @@ type OverlayScreen = 'createEvent' | 'editEvent' | null;
 
 function MainApp() {
   const insets = useSafeAreaInsets();
-  const { isLoggedIn, accessToken } = useAuth();
+  const { isLoggedIn, accessToken, isBootstrapping } = useAuth();
   const tabBarInset = TAB_BAR_HEIGHT + Math.max(insets.bottom, spacing.sm);
 
   const [activeTab, setActiveTab] = useState<MainTab>('calendar');
   const [overlayScreen, setOverlayScreen] = useState<OverlayScreen>(null);
   const [returnTab, setReturnTab] = useState<MainTab>('calendar');
   const [createEventDate, setCreateEventDate] = useState<Date>(() => new Date());
-  const [schedules, setSchedules] = useState<ScheduleItem[]>(() =>
-    MOCK_SCHEDULES.map((item) => ({
-      ...item,
-      startTime: new Date(item.startTime),
-      endTime: new Date(item.endTime),
-    })),
-  );
+  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const [hasMoreSchedules, setHasMoreSchedules] = useState(false);
+  const [loadingMoreSchedules, setLoadingMoreSchedules] = useState(false);
+  const nextScheduleCursorRef = useRef<string | null>(null);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+
+  const mergeScheduleItems = useCallback((current: ScheduleItem[], incoming: ScheduleItem[]) => {
+    if (incoming.length === 0) {
+      return current;
+    }
+
+    const existingIds = new Set(current.map((item) => item.id));
+    const merged = [...current];
+
+    incoming.forEach((item) => {
+      if (!existingIds.has(item.id)) {
+        merged.push(item);
+      }
+    });
+
+    return merged.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+  }, []);
+
+  const applyScheduleScroll = useCallback(
+    (data: Awaited<ReturnType<typeof listSchedulesApi>>, reset: boolean) => {
+      const items = data.records.map(scheduleVoToItem);
+      setSchedules((prev) => (reset ? items : mergeScheduleItems(prev, items)));
+      setHasMoreSchedules(data.hasMore);
+      nextScheduleCursorRef.current = data.nextCursor;
+    },
+    [mergeScheduleItems],
+  );
+
+  const loadSchedules = useCallback(async () => {
+    if (!accessToken) {
+      setSchedules([]);
+      setHasMoreSchedules(false);
+      nextScheduleCursorRef.current = null;
+      return;
+    }
+
+    const data = await listSchedulesApi(accessToken);
+    applyScheduleScroll(data, true);
+  }, [accessToken, applyScheduleScroll]);
+
+  const loadMoreSchedules = useCallback(async () => {
+    if (!accessToken || !hasMoreSchedules || loadingMoreSchedules || !nextScheduleCursorRef.current) {
+      return;
+    }
+
+    setLoadingMoreSchedules(true);
+    try {
+      const data = await listSchedulesApi(accessToken, {
+        cursor: nextScheduleCursorRef.current,
+      });
+      applyScheduleScroll(data, false);
+    } catch (error) {
+      console.error('[schedules] load more failed:', error);
+    } finally {
+      setLoadingMoreSchedules(false);
+    }
+  }, [accessToken, applyScheduleScroll, hasMoreSchedules, loadingMoreSchedules]);
+
+  useEffect(() => {
+    if (isBootstrapping) {
+      return;
+    }
+
+    if (!isLoggedIn || !accessToken) {
+      setSchedules([]);
+      setHasMoreSchedules(false);
+      nextScheduleCursorRef.current = null;
+      return;
+    }
+
+    loadSchedules().catch((error) => {
+      console.error('[schedules] load failed:', error);
+    });
+  }, [isBootstrapping, isLoggedIn, accessToken, loadSchedules]);
 
   const selectedSchedule = useMemo(
     () => schedules.find((item) => item.id === selectedScheduleId) ?? null,
@@ -207,6 +277,9 @@ function MainApp() {
             onSchedulesChange={setSchedules}
             onAddPress={handleScheduleAddPress}
             onSchedulePress={openScheduleDetail}
+            onLoadMore={loadMoreSchedules}
+            hasMore={hasMoreSchedules}
+            loadingMore={loadingMoreSchedules}
             bottomInset={tabBarInset}
           />
         )}

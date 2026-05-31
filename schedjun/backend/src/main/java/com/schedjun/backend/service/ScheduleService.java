@@ -1,5 +1,6 @@
 package com.schedjun.backend.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schedjun.backend.common.context.BaseContext;
@@ -8,23 +9,29 @@ import com.schedjun.backend.common.entity.Schedule;
 import com.schedjun.backend.common.entity.User;
 import com.schedjun.backend.common.model.ReminderRule;
 import com.schedjun.backend.common.model.RepeatRule;
+import com.schedjun.backend.common.vo.ScheduleScrollVO;
 import com.schedjun.backend.common.vo.ScheduleVO;
 import com.schedjun.backend.mapper.ScheduleMapper;
 import com.schedjun.backend.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 @Service
 public class ScheduleService {
 
     private static final String DEFAULT_TIMEZONE = "Asia/Shanghai";
     private static final String DEFAULT_SOURCE = "manual";
+    private static final int MAX_SCROLL_LIMIT = 50;
+    private static final DateTimeFormatter CURSOR_TIME_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     @Autowired
     private ScheduleMapper scheduleMapper;
@@ -66,6 +73,95 @@ public class ScheduleService {
         scheduleMapper.insert(schedule);
 
         return toScheduleVO(schedule, resolveTimezone(user));
+    }
+
+    public ScheduleScrollVO scrollList(String startDate, String endDate, String keyword, String cursor, int limit) {
+        Long userId = BaseContext.getCurrentId();
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录");
+        }
+
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+
+        int safeLimit = Math.min(Math.max(limit, 1), MAX_SCROLL_LIMIT);
+        String timezone = resolveTimezone(user);
+
+        LambdaQueryWrapper<Schedule> listQuery = buildListQuery(userId, startDate, endDate, keyword);
+        applyCursorFilter(listQuery, cursor);
+        listQuery.orderByAsc(Schedule::getStartTime)
+                .orderByAsc(Schedule::getId)
+                .last(String.format("LIMIT %d", safeLimit + 1));
+
+        List<Schedule> fetched = scheduleMapper.selectList(listQuery);
+        boolean hasMore = fetched.size() > safeLimit;
+        List<Schedule> pageItems = hasMore ? fetched.subList(0, safeLimit) : fetched;
+
+        List<ScheduleVO> records = pageItems.stream()
+                .map(schedule -> toScheduleVO(schedule, timezone))
+                .toList();
+
+        String nextCursor = hasMore && !pageItems.isEmpty()
+                ? encodeCursor(pageItems.get(pageItems.size() - 1))
+                : null;
+
+        return new ScheduleScrollVO(records, hasMore, nextCursor);
+    }
+
+    private void applyCursorFilter(LambdaQueryWrapper<Schedule> wrapper, String cursor) {
+        if (!StringUtils.hasText(cursor)) {
+            return;
+        }
+
+        String[] parts = cursor.trim().split("\\|", 2);
+        if (parts.length != 2) {
+            throw new IllegalArgumentException("游标格式无效");
+        }
+
+        LocalDateTime cursorStartTime = LocalDateTime.parse(parts[0], CURSOR_TIME_FORMAT);
+        Long cursorId = Long.parseLong(parts[1]);
+
+        wrapper.and(query -> query
+                .gt(Schedule::getStartTime, cursorStartTime)
+                .or(nested -> nested
+                        .eq(Schedule::getStartTime, cursorStartTime)
+                        .gt(Schedule::getId, cursorId)));
+    }
+
+    private String encodeCursor(Schedule schedule) {
+        return schedule.getStartTime().format(CURSOR_TIME_FORMAT) + "|" + schedule.getId();
+    }
+
+    private LambdaQueryWrapper<Schedule> buildListQuery(
+            Long userId,
+            String startDate,
+            String endDate,
+            String keyword
+    ) {
+        LambdaQueryWrapper<Schedule> wrapper = new LambdaQueryWrapper<Schedule>()
+                .eq(Schedule::getUserId, userId);
+
+        if (StringUtils.hasText(startDate)) {
+            LocalDate start = LocalDate.parse(startDate);
+            wrapper.ge(Schedule::getStartTime, start.atStartOfDay());
+        }
+
+        if (StringUtils.hasText(endDate)) {
+            LocalDate end = LocalDate.parse(endDate);
+            wrapper.lt(Schedule::getStartTime, end.plusDays(1).atStartOfDay());
+        }
+
+        if (StringUtils.hasText(keyword)) {
+            String trimmedKeyword = keyword.trim();
+            wrapper.and(query -> query
+                    .like(Schedule::getTitle, trimmedKeyword)
+                    .or()
+                    .like(Schedule::getNotes, trimmedKeyword));
+        }
+
+        return wrapper;
     }
 
     static String formatScheduleId(Long id) {

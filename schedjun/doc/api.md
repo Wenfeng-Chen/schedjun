@@ -221,19 +221,32 @@
 
 `GET /schedules`
 
+滚动加载，按 `startTime` 升序返回。首次不传 `cursor`，触底后用上一批响应里的 `nextCursor` 继续拉取。
+
 **Query：**
 
+| 参数          | 类型     | 说明                                      |
+| ----------- | ------ | --------------------------------------- |
+| `startDate` | string | 筛选起始日期 `2026-05-01`                     |
+| `endDate`   | string | 筛选结束日期 `2026-05-31`                     |
+| `keyword`   | string | 标题/备注模糊搜索                               |
+| `cursor`    | string | 滚动游标，首次不传；取上一批 `nextCursor`            |
+| `limit`     | int    | 每批条数，默认 `20`，最大 `50`                    |
 
-| 参数          | 类型     | 说明                  |
-| ----------- | ------ | ------------------- |
-| `startDate` | string | 筛选起始日期 `2026-05-01` |
-| `endDate`   | string | 筛选结束日期 `2026-05-31` |
-| `keyword`   | string | 标题/备注模糊搜索           |
-| `page`      | int    | 分页                  |
-| `pageSize`  | int    | 分页                  |
+**Response data：**
 
+```json
+{
+  "records": [ /* ScheduleVO[] */ ],
+  "hasMore": true,
+  "nextCursor": "2026-05-30T10:00:00|123"
+}
+```
 
-**Response data：** 分页 + `ScheduleVO[]`
+- `records`：本批日程，按 `startTime` 升序
+- `hasMore`：是否还有下一批
+- `nextCursor`：下一批游标；`hasMore=false` 时为 `null`
+- 游标格式：`{startTime}|{scheduleId}`，`startTime` 为 ISO 本地时间，`scheduleId` 为数据库自增 ID
 
 ---
 

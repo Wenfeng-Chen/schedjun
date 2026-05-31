@@ -76,3 +76,28 @@ export async function getJson<T>(path: string, token: string): Promise<ApiResult
     token,
   });
 }
+
+function buildQueryString(params: Record<string, string | number | undefined | null>): string {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      searchParams.append(key, String(value));
+    }
+  });
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+}
+
+export async function getJsonWithToken<T>(
+  path: string,
+  token: string,
+  params?: Record<string, string | number | undefined | null>,
+): Promise<ApiResult<T>> {
+  const query = params ? buildQueryString(params) : '';
+  return requestJson<T>(`${path}${query}`, {
+    method: 'GET',
+    token,
+  });
+}
