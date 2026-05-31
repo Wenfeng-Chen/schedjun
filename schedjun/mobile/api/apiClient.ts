@@ -58,6 +58,18 @@ export async function postJson<T>(path: string, body: unknown): Promise<ApiResul
   });
 }
 
+export async function postJsonWithToken<T>(
+  path: string,
+  body: unknown,
+  token: string,
+): Promise<ApiResult<T>> {
+  return requestJson<T>(path, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    token,
+  });
+}
+
 export async function getJson<T>(path: string, token: string): Promise<ApiResult<T>> {
   return requestJson<T>(path, {
     method: 'GET',
