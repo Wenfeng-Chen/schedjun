@@ -19,16 +19,19 @@ import BottomTabBar, { MainTab, TAB_BAR_HEIGHT } from './components/navigation/B
 import MineScreen from './components/profile/MineScreen';
 import MyScheduleScreen from './components/schedule/MyScheduleScreen';
 import ScheduleDetailScreen from './components/schedule/ScheduleDetailScreen';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { createScheduleApi } from './api/scheduleApi';
 import { MOCK_SCHEDULES } from './constants/mockSchedules';
 import { ScheduleItem } from './constants/scheduleTypes';
 import { colors, spacing } from './constants/theme';
 import { formDataToSchedule, scheduleToFormData } from './utils/scheduleDetailUtils';
+import { scheduleVoToItem } from './utils/scheduleApiUtils';
 
 type OverlayScreen = 'createEvent' | 'editEvent' | null;
 
 function MainApp() {
   const insets = useSafeAreaInsets();
+  const { isLoggedIn, accessToken } = useAuth();
   const tabBarInset = TAB_BAR_HEIGHT + Math.max(insets.bottom, spacing.sm);
 
   const [activeTab, setActiveTab] = useState<MainTab>('calendar');
@@ -72,10 +75,20 @@ function MainApp() {
     openCreateEvent(new Date(), 'schedules');
   }, [openCreateEvent]);
 
-  const handleSaveEvent = (_data: EventFormData) => {
-    setOverlayScreen(null);
-    setActiveTab(returnTab);
-  };
+  const handleSaveEvent = useCallback(
+    async (data: EventFormData) => {
+      if (!isLoggedIn || !accessToken) {
+        throw new Error('请先登录后再创建日程');
+      }
+
+      const created = await createScheduleApi(accessToken, data);
+      const item = scheduleVoToItem(created);
+      setSchedules((prev) =>
+        [...prev, item].sort((a, b) => a.startTime.getTime() - b.startTime.getTime()),
+      );
+    },
+    [accessToken, isLoggedIn],
+  );
 
   const openScheduleDetail = useCallback((scheduleId: string) => {
     setSelectedScheduleId(scheduleId);

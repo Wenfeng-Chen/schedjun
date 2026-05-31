@@ -42,7 +42,7 @@ export interface EventFormData {
 interface CreateEventScreenProps {
   initialDate: Date;
   onClose: () => void;
-  onSave?: (data: EventFormData) => void;
+  onSave?: (data: EventFormData) => void | Promise<void>;
 }
 
 type PickerTarget = 'start' | 'end' | null;
@@ -64,6 +64,7 @@ export default function CreateEventScreen({
   const [notes, setNotes] = useState('');
 
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleDateTimeConfirm = (selected: Date): boolean => {
     if (pickerTarget === 'start') {
@@ -89,7 +90,11 @@ export default function CreateEventScreen({
     setPickerTarget(target);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (submitting) {
+      return;
+    }
+
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       Alert.alert('提示', '请输入日程内容');
@@ -101,15 +106,22 @@ export default function CreateEventScreen({
       return;
     }
 
-    onSave?.({
-      title: trimmedTitle,
-      startTime,
-      endTime,
-      repeat: repeatRule,
-      reminder: reminderRule,
-      notes: notes.trim(),
-    });
-    onClose();
+    setSubmitting(true);
+    try {
+      await onSave?.({
+        title: trimmedTitle,
+        startTime,
+        endTime,
+        repeat: repeatRule,
+        reminder: reminderRule,
+        notes: notes.trim(),
+      });
+      onClose();
+    } catch (error) {
+      Alert.alert('提示', error instanceof Error ? error.message : '保存失败');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (subScreen === 'repeat') {
@@ -158,7 +170,12 @@ export default function CreateEventScreen({
           <Ionicons name="close" size={24} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>创建日程</Text>
-        <Pressable style={styles.headerButton} onPress={handleSave} hitSlop={8}>
+        <Pressable
+          style={[styles.headerButton, submitting && styles.headerButtonDisabled]}
+          onPress={handleSave}
+          disabled={submitting}
+          hitSlop={8}
+        >
           <Ionicons name="checkmark" size={26} color={colors.primary} />
         </Pressable>
       </View>
@@ -260,6 +277,9 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerButtonDisabled: {
+    opacity: 0.5,
   },
   headerTitle: {
     fontFamily: fonts.bodySemiBold,
