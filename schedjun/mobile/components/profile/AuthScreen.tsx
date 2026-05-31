@@ -31,21 +31,32 @@ export default function AuthScreen({ mode, onClose, onSwitchMode }: AuthScreenPr
   const isRegister = mode === 'register';
 
   const [username, setUsername] = useState('');
-  const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    const error = isRegister
-      ? register({ username, nickname, password, confirmPassword })
-      : login({ username, password });
-
-    if (error) {
-      Alert.alert('提示', error);
+  const handleSubmit = async () => {
+    if (submitting) {
       return;
     }
 
-    onClose();
+    setSubmitting(true);
+    try {
+      const error = isRegister
+        ? await register({ username, password, confirmPassword })
+        : login({ username, password });
+
+      if (error) {
+        Alert.alert('提示', error);
+        return;
+      }
+
+      onClose();
+    } catch (error) {
+      Alert.alert('提示', error instanceof Error ? error.message : '请求失败');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -66,7 +77,7 @@ export default function AuthScreen({ mode, onClose, onSwitchMode }: AuthScreenPr
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.hero}>
-            <DefaultAvatar nickname={isRegister ? nickname : username} size={80} guest={!username && !nickname} />
+            <DefaultAvatar nickname={username} size={80} guest={!username} />
             <Text style={styles.heroTitle}>{isRegister ? '创建账号' : '欢迎回来'}</Text>
             <Text style={styles.heroSubtitle}>
               {isRegister ? '注册后即可同步你的日程' : '登录日程君，继续管理你的安排'}
@@ -85,19 +96,6 @@ export default function AuthScreen({ mode, onClose, onSwitchMode }: AuthScreenPr
                 onChangeText={setUsername}
               />
             </View>
-
-            {isRegister && (
-              <View style={styles.field}>
-                <Text style={styles.label}>昵称</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="怎么称呼你"
-                  placeholderTextColor={colors.textMuted}
-                  value={nickname}
-                  onChangeText={setNickname}
-                />
-              </View>
-            )}
 
             <View style={styles.field}>
               <Text style={styles.label}>密码</Text>
@@ -126,8 +124,14 @@ export default function AuthScreen({ mode, onClose, onSwitchMode }: AuthScreenPr
             )}
           </View>
 
-          <Pressable style={styles.submitButton} onPress={handleSubmit}>
-            <Text style={styles.submitText}>{isRegister ? '注册' : '登录'}</Text>
+          <Pressable
+            style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={submitting}
+          >
+            <Text style={styles.submitText}>
+              {submitting ? '提交中...' : isRegister ? '注册' : '登录'}
+            </Text>
           </Pressable>
 
           <Pressable
@@ -219,6 +223,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
   },
   submitText: {
     fontFamily: fonts.bodySemiBold,

@@ -103,19 +103,19 @@ export default function MineScreen({ scheduleCount, bottomInset }: MineScreenPro
 
         <View style={styles.profileCard}>
           <DefaultAvatar
-            nickname={isLoggedIn ? user?.nickname : undefined}
+            nickname={isLoggedIn ? user?.username : undefined}
             size={64}
             guest={!isLoggedIn}
           />
           <View style={styles.profileInfo}>
             {isLoggedIn && user ? (
               <>
-                <Text style={styles.nickname}>{user.nickname}</Text>
+                <Text style={styles.displayName}>{user.username}</Text>
                 <Text style={styles.username}>@{user.username}</Text>
               </>
             ) : (
               <>
-                <Text style={styles.nickname}>未登录</Text>
+                <Text style={styles.displayName}>未登录</Text>
                 <Text style={styles.username}>登录后同步日程与偏好设置</Text>
               </>
             )}
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
   profileInfo: {
     flex: 1,
   },
-  nickname: {
+  displayName: {
     fontFamily: fonts.bodyBold,
     fontSize: 18,
     color: colors.text,

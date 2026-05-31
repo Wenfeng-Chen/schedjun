@@ -1,4 +1,4 @@
-package com.sky.json;
+package com.schedjun.backend.common.json;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;

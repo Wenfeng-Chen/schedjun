@@ -1,4 +1,4 @@
-package com.schedjun.backend.config;
+package com.schedjun.backend.interceptor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schedjun.backend.common.context.BaseContext;
