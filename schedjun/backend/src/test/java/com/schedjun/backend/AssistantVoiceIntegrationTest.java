@@ -1,4 +1,4 @@
-package com.schedjun.backend;
+git checkout -b feat/你的功能名package com.schedjun.backend;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
