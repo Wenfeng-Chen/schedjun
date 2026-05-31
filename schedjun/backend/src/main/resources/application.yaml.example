@@ -1,0 +1,18 @@
+
+spring:
+  application:
+    name: schedjun-backend
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/schedjun?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: your-username
+    password: your-password
+    
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
