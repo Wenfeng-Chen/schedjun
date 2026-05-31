@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   SectionList,
@@ -27,6 +28,9 @@ interface MyScheduleScreenProps {
   onBack?: () => void;
   onAddPress?: () => void;
   onSchedulePress: (scheduleId: string) => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
   embedded?: boolean;
   bottomInset?: number;
 }
@@ -98,6 +102,9 @@ export default function MyScheduleScreen({
   onBack,
   onAddPress,
   onSchedulePress,
+  onLoadMore,
+  hasMore = false,
+  loadingMore = false,
   embedded = false,
   bottomInset = 0,
 }: MyScheduleScreenProps) {
@@ -267,12 +274,25 @@ export default function MyScheduleScreen({
         sections={sections}
         keyExtractor={(item) => item.key}
         showsVerticalScrollIndicator={false}
+        onEndReached={() => {
+          if (hasMore && !loadingMore) {
+            onLoadMore?.();
+          }
+        }}
+        onEndReachedThreshold={0.2}
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: bottomInset + spacing.xl },
           selectionMode && selectedCount > 0 && styles.listContentWithFooter,
         ]}
         stickySectionHeadersEnabled={false}
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={styles.loadingMore}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null
+        }
         renderSectionHeader={({ section }) => (
           <Text style={[styles.sectionTitle, embedded && styles.sectionTitleEmbedded]}>
             {section.title}
@@ -387,6 +407,10 @@ const styles = StyleSheet.create({
   },
   listContentWithFooter: {
     paddingBottom: 96,
+  },
+  loadingMore: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
   },
   sectionTitle: {
     fontFamily: fonts.bodySemiBold,
