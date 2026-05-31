@@ -1,0 +1,14 @@
+{
+  "properties": [
+    {
+      "name": "schedjun.jwt.secret",
+      "type": "java.lang.String",
+      "description": "JWT signing secret key."
+    },
+    {
+      "name": "schedjun.jwt.expires-in",
+      "type": "java.lang.Long",
+      "description": "JWT expiration time in seconds."
+    }
+  ]
+}
