@@ -29,15 +29,15 @@ interface CalendarPageState {
 interface CalendarViewProps {
   schedules: ScheduleItem[];
   onAddPress?: (selectedDate: Date) => void;
-  onMySchedulePress?: () => void;
   onSchedulePress?: (scheduleId: string) => void;
+  contentBottomInset?: number;
 }
 
 export default function CalendarView({
   schedules,
   onAddPress,
-  onMySchedulePress,
   onSchedulePress,
+  contentBottomInset = 0,
 }: CalendarViewProps) {
   const today = useMemo(() => {
     const now = new Date();
@@ -104,7 +104,7 @@ export default function CalendarView({
   }, [handleSelectDate, today]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: contentBottomInset }]}>
       <View style={styles.card}>
         <CalendarHeader
           monthRef={visibleMonth}
@@ -142,7 +142,6 @@ export default function CalendarView({
       <CalendarMenu
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
-        onMySchedulePress={onMySchedulePress}
         onDateJumpPress={() => setDateJumpVisible(true)}
       />
 

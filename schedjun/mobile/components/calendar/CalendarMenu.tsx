@@ -5,29 +5,19 @@ import { colors, radius, spacing } from '../../constants/theme';
 interface CalendarMenuProps {
   visible: boolean;
   onClose: () => void;
-  onMySchedulePress?: () => void;
   onDateJumpPress?: () => void;
 }
 
-const MENU_ITEMS = [
-  { label: '我的日程', action: 'mySchedule' as const },
-  { label: '日期跳转', action: 'dateJump' as const },
-];
+const MENU_ITEMS = [{ label: '日期跳转', action: 'dateJump' as const }];
 
 export default function CalendarMenu({
   visible,
   onClose,
-  onMySchedulePress,
   onDateJumpPress,
 }: CalendarMenuProps) {
-  const handlePress = (action: (typeof MENU_ITEMS)[number]['action']) => {
+  const handlePress = () => {
     onClose();
-    if (action === 'mySchedule') {
-      onMySchedulePress?.();
-    }
-    if (action === 'dateJump') {
-      onDateJumpPress?.();
-    }
+    onDateJumpPress?.();
   };
 
   return (
@@ -39,7 +29,7 @@ export default function CalendarMenu({
               <Pressable
                 key={item.label}
                 style={[styles.menuItem, index < MENU_ITEMS.length - 1 && styles.menuItemBorder]}
-                onPress={() => handlePress(item.action)}
+                onPress={handlePress}
               >
                 <Text style={styles.menuText}>{item.label}</Text>
               </Pressable>
