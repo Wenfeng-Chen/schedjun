@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../../.vscode/spring-boot-application.schema.json
 
 spring:
   application:
@@ -6,13 +7,22 @@ spring:
     url: jdbc:mysql://127.0.0.1:3306/schedjun?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: your-username
     password: your-password
-    
-  jpa:
-    hibernate:
-      ddl-auto: none
-    show-sql: true
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
 
 server:
   port: 8080
+  address: 0.0.0.0
   servlet:
     context-path: /api/v1
+
+schedjun:
+  jwt:
+    secret: wo-neng-xing
+    expires-in: 720000

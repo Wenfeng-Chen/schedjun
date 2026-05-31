@@ -47,10 +47,7 @@ export function getMonthLabel(ref: MonthRef): string {
   return `${ref.month + 1}月`;
 }
 
-export function getMonthTitle(ref: MonthRef, today: Date): string {
-  if (ref.year === today.getFullYear()) {
-    return getMonthLabel(ref);
-  }
+export function getMonthTitle(ref: MonthRef, _today?: Date): string {
   return `${ref.year}年${ref.month + 1}月`;
 }
 

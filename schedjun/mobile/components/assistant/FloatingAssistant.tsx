@@ -202,7 +202,7 @@ export default function FloatingAssistant() {
                 style={[styles.bubble, bubbleStyle]}
                 pointerEvents="none"
               >
-                <Text style={styles.bubbleText}>说说你的安排～</Text>
+                <Text style={styles.bubbleText}>和我聊聊安排～</Text>
                 <View style={styles.bubbleTail} />
               </Animated.View>
 

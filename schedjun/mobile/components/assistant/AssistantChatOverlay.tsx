@@ -1,31 +1,30 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
-import {
-  Keyboard,
-  KeyboardEvent,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
+  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fonts } from '../../constants/fonts';
 import { colors, radius, spacing } from '../../constants/theme';
+import DefaultAvatar from '../profile/DefaultAvatar';
 import VoiceWaveform from './VoiceWaveform';
 
-type InputMode = 'voice' | 'text';
+type VoiceState = 'idle' | 'listening';
 
-/** 底部光晕：主色蓝 → 天青 → 淡紫，与 App 冷色背景统一 */
+const HINTS = [
+  '明天下午三点开会',
+  '每周一上午十点团队站会',
+  '下周五提醒交周报',
+];
+
 const BOTTOM_GLOW_COLORS = [
   'rgba(238,242,250,0)',
   'rgba(79,124,255,0.2)',
@@ -33,51 +32,46 @@ const BOTTOM_GLOW_COLORS = [
   'rgba(167,186,255,0.46)',
 ] as const;
 
-const INPUT_BORDER_COLORS = ['#4F7CFF', '#6BA3FF', '#94C4F0'] as const;
-
 interface AssistantChatOverlayProps {
   onClose: () => void;
 }
 
 export default function AssistantChatOverlay({ onClose }: AssistantChatOverlayProps) {
   const insets = useSafeAreaInsets();
-  const inputRef = useRef<TextInput>(null);
-
-  const [inputMode, setInputMode] = useState<InputMode>('voice');
-  const [text, setText] = useState('');
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [hintIndex, setHintIndex] = useState(0);
 
   const backdropOpacity = useSharedValue(0);
   const panelTranslateY = useSharedValue(120);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const onShow = (event: KeyboardEvent) => {
-      setKeyboardHeight(event.endCoordinates.height);
-    };
-    const onHide = () => setKeyboardHeight(0);
-
-    const showSub = Keyboard.addListener(showEvent, onShow);
-    const hideSub = Keyboard.addListener(hideEvent, onHide);
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+  const micPulse = useSharedValue(1);
 
   useEffect(() => {
     backdropOpacity.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) });
     panelTranslateY.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.cubic) });
-    setInputMode('voice');
-    setText('');
-
-    return () => {
-      Keyboard.dismiss();
-    };
+    setVoiceState('idle');
   }, [backdropOpacity, panelTranslateY]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setHintIndex((prev) => (prev + 1) % HINTS.length);
+    }, 3600);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (voiceState === 'listening') {
+      micPulse.value = withRepeat(
+        withSequence(
+          withTiming(1.12, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+          withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+        ),
+        -1,
+        true,
+      );
+      return;
+    }
+    micPulse.value = withTiming(1, { duration: 200 });
+  }, [voiceState, micPulse]);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdropOpacity.value,
@@ -88,22 +82,17 @@ export default function AssistantChatOverlay({ onClose }: AssistantChatOverlayPr
     opacity: backdropOpacity.value,
   }));
 
-  const switchToText = () => {
-    setInputMode('text');
-    setTimeout(() => inputRef.current?.focus(), 80);
+  const micRingStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: micPulse.value }],
+    opacity: voiceState === 'listening' ? 0.35 : 0,
+  }));
+
+  const toggleListening = () => {
+    setVoiceState((prev) => (prev === 'idle' ? 'listening' : 'idle'));
   };
 
-  const switchToVoice = () => {
-    Keyboard.dismiss();
-    setInputMode('voice');
-  };
-
-  const panelBottomPadding =
-    keyboardHeight > 0
-      ? keyboardHeight + spacing.md + (Platform.OS === 'android' ? 12 : 4)
-      : insets.bottom + spacing.sm;
-
-  const showBottomGlow = keyboardHeight === 0;
+  const statusText = voiceState === 'listening' ? '我在听，请说...' : '点击麦克风，告诉我你的安排';
+  const actionText = voiceState === 'listening' ? '再次点击结束' : '支持创建、查询与修改日程';
 
   return (
     <View style={styles.root} pointerEvents="box-none">
@@ -111,71 +100,59 @@ export default function AssistantChatOverlay({ onClose }: AssistantChatOverlayPr
         <Animated.View style={[styles.backdrop, backdropStyle]} />
       </Pressable>
 
-      <View style={styles.keyboardWrap} pointerEvents="box-none">
+      <View style={styles.panelWrap} pointerEvents="box-none">
         <Animated.View
-          style={[
-            styles.panel,
-            { paddingBottom: panelBottomPadding },
-            panelStyle,
-          ]}
+          style={[styles.panel, { paddingBottom: insets.bottom + spacing.md }, panelStyle]}
         >
-          {showBottomGlow && (
-            <Pressable style={styles.handleArea} onPress={onClose}>
-              <View style={styles.handle} />
-            </Pressable>
-          )}
+          <LinearGradient
+            colors={[...BOTTOM_GLOW_COLORS]}
+            locations={[0, 0.32, 0.68, 1]}
+            style={styles.bottomGlow}
+            pointerEvents="none"
+          />
 
-          <View style={styles.inputWrapper}>
-            {showBottomGlow && (
-              <LinearGradient
-                colors={[...BOTTOM_GLOW_COLORS]}
-                locations={[0, 0.32, 0.68, 1]}
-                style={styles.bottomGlow}
-                pointerEvents="none"
-              />
-            )}
+          <Pressable style={styles.handleArea} onPress={onClose}>
+            <View style={styles.handle} />
+          </Pressable>
 
-            <LinearGradient
-            colors={[...INPUT_BORDER_COLORS]}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.inputBorder}
-          >
-            <View style={styles.inputBar}>
-              <Pressable
-                style={styles.inputCenter}
-                onPress={inputMode === 'voice' ? switchToText : undefined}
-              >
-                {inputMode === 'voice' ? (
-                  <>
-                    <Text style={styles.listeningText}>我在听...</Text>
-                    <VoiceWaveform active />
-                  </>
-                ) : (
-                  <TextInput
-                    ref={inputRef}
-                    style={styles.textInput}
-                    placeholder="输入日程内容..."
-                    placeholderTextColor={colors.textMuted}
-                    value={text}
-                    onChangeText={setText}
-                    returnKeyType="send"
-                    multiline={false}
-                  />
-                )}
-              </Pressable>
-
-              {inputMode === 'text' ? (
-                <Pressable style={styles.iconButton} onPress={switchToVoice} hitSlop={6}>
-                  <Ionicons name="mic-outline" size={22} color={colors.primary} />
-                </Pressable>
-              ) : (
-                <Pressable style={styles.iconButton} onPress={switchToText} hitSlop={6}>
-                  <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
-                </Pressable>
-              )}
+          <View style={styles.voiceCard}>
+            <View style={styles.agentRow}>
+              <DefaultAvatar nickname="君听" size={40} />
+              <View style={styles.agentInfo}>
+                <Text style={styles.agentName}>君听</Text>
+                <Text style={styles.agentRole}>你的日程语音助手</Text>
+              </View>
             </View>
-          </LinearGradient>
+
+            <Text style={styles.statusText}>{statusText}</Text>
+
+            <View style={styles.waveformWrap}>
+              <VoiceWaveform active={voiceState === 'listening'} size="large" />
+            </View>
+
+            <View style={styles.hintBubble}>
+              <Text style={styles.hintLabel}>试试说</Text>
+              <Text style={styles.hintText}>「{HINTS[hintIndex]}」</Text>
+            </View>
+
+            <View style={styles.micArea}>
+              <Animated.View style={[styles.micRing, micRingStyle]} />
+              <Pressable
+                style={[
+                  styles.micButton,
+                  voiceState === 'listening' && styles.micButtonActive,
+                ]}
+                onPress={toggleListening}
+              >
+                <Ionicons
+                  name={voiceState === 'listening' ? 'mic' : 'mic-outline'}
+                  size={30}
+                  color="#FFFFFF"
+                />
+              </Pressable>
+            </View>
+
+            <Text style={styles.actionText}>{actionText}</Text>
           </View>
         </Animated.View>
       </View>
@@ -192,7 +169,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(15, 23, 42, 0.38)',
   },
-  keyboardWrap: {
+  panelWrap: {
     flex: 1,
     justifyContent: 'flex-end',
   },
@@ -200,17 +177,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     overflow: 'visible',
   },
-  inputWrapper: {
-    position: 'relative',
-    zIndex: 2,
-  },
   bottomGlow: {
     position: 'absolute',
     left: -20,
     right: -20,
-    bottom: -36,
-    height: 100,
-    zIndex: 0,
+    bottom: 0,
+    height: 220,
   },
   handleArea: {
     alignItems: 'center',
@@ -222,51 +194,107 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.85)',
   },
-  inputBorder: {
-    borderRadius: radius.xl + 4,
-    padding: 2.5,
-    zIndex: 1,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+  voiceCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
+    alignItems: 'center',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  agentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  agentInfo: {
+    flex: 1,
+  },
+  agentName: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 17,
+    color: colors.text,
+  },
+  agentRole: {
+    marginTop: 2,
+    fontFamily: fonts.body,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  statusText: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 18,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  waveformWrap: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  hintBubble: {
+    alignSelf: 'stretch',
+    backgroundColor: colors.primaryLight,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+  },
+  hintLabel: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  hintText: {
+    marginTop: 2,
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 14,
+    color: colors.primary,
+    textAlign: 'center',
+  },
+  micArea: {
+    marginTop: spacing.lg,
+    width: 88,
+    height: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micRing: {
+    position: 'absolute',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: colors.primary,
+  },
+  micButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primaryDark,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
     shadowRadius: 12,
     elevation: 6,
   },
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: radius.xl + 2,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: spacing.sm + 4,
-    minHeight: 56,
-    gap: spacing.sm,
+  micButtonActive: {
+    backgroundColor: colors.primaryDark,
   },
-  iconButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inputCenter: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    minHeight: 36,
-  },
-  listeningText: {
-    fontFamily: fonts.bodySemiBold,
-    fontSize: 16,
-    color: colors.text,
-  },
-  textInput: {
-    flex: 1,
+  actionText: {
+    marginTop: spacing.md,
     fontFamily: fonts.body,
-    fontSize: 16,
-    color: colors.text,
-    paddingVertical: 0,
-    minHeight: 36,
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
 });

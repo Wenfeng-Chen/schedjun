@@ -12,24 +12,54 @@ import Animated, {
 
 import { colors } from '../../constants/theme';
 
-const BAR_COUNT = 5;
-const BAR_HEIGHTS = [10, 16, 12, 18, 11];
-const BAR_COLOR = colors.primary;
+type WaveformSize = 'compact' | 'large';
 
-function WaveBar({ index, active }: { index: number; active: boolean }) {
-  const scale = useSharedValue(0.35);
+interface VoiceWaveformProps {
+  active?: boolean;
+  size?: WaveformSize;
+}
+
+const PRESETS = {
+  compact: {
+    barCount: 5,
+    barHeights: [10, 16, 12, 18, 11],
+    barWidth: 3,
+    gap: 3,
+    containerHeight: 20,
+  },
+  large: {
+    barCount: 9,
+    barHeights: [14, 28, 18, 36, 22, 32, 16, 26, 12],
+    barWidth: 4,
+    gap: 5,
+    containerHeight: 40,
+  },
+} as const;
+
+function WaveBar({
+  index,
+  active,
+  height,
+  barWidth,
+}: {
+  index: number;
+  active: boolean;
+  height: number;
+  barWidth: number;
+}) {
+  const scale = useSharedValue(0.3);
 
   useEffect(() => {
     if (!active) {
-      scale.value = withTiming(0.35, { duration: 200 });
+      scale.value = withTiming(0.3, { duration: 200 });
       return;
     }
     scale.value = withDelay(
-      index * 80,
+      index * 70,
       withRepeat(
         withSequence(
-          withTiming(1, { duration: 280 + index * 40, easing: Easing.inOut(Easing.quad) }),
-          withTiming(0.3, { duration: 280 + index * 40, easing: Easing.inOut(Easing.quad) }),
+          withTiming(1, { duration: 260 + index * 35, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0.25, { duration: 260 + index * 35, easing: Easing.inOut(Easing.quad) }),
         ),
         -1,
         true,
@@ -45,22 +75,38 @@ function WaveBar({ index, active }: { index: number; active: boolean }) {
     <Animated.View
       style={[
         styles.bar,
-        { height: BAR_HEIGHTS[index], backgroundColor: BAR_COLOR },
+        {
+          width: barWidth,
+          height,
+          backgroundColor: colors.primary,
+        },
         barStyle,
       ]}
     />
   );
 }
 
-interface VoiceWaveformProps {
-  active?: boolean;
-}
+export default function VoiceWaveform({ active = true, size = 'compact' }: VoiceWaveformProps) {
+  const preset = PRESETS[size];
 
-export default function VoiceWaveform({ active = true }: VoiceWaveformProps) {
   return (
-    <View style={styles.container}>
-      {Array.from({ length: BAR_COUNT }).map((_, index) => (
-        <WaveBar key={index} index={index} active={active} />
+    <View
+      style={[
+        styles.container,
+        {
+          gap: preset.gap,
+          height: preset.containerHeight,
+        },
+      ]}
+    >
+      {Array.from({ length: preset.barCount }).map((_, index) => (
+        <WaveBar
+          key={index}
+          index={index}
+          active={active}
+          height={preset.barHeights[index]}
+          barWidth={preset.barWidth}
+        />
       ))}
     </View>
   );
@@ -70,11 +116,9 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    height: 20,
+    justifyContent: 'center',
   },
   bar: {
-    width: 3,
-    borderRadius: 2,
+    borderRadius: 3,
   },
 });
