@@ -43,7 +43,7 @@ export interface EditEventFormData {
 interface EditEventScreenProps {
   initialData: EditEventFormData;
   onClose: () => void;
-  onSave: (data: EditEventFormData) => void;
+  onSave: (data: EditEventFormData) => void | Promise<void>;
 }
 
 type PickerTarget = 'start' | 'end' | null;
@@ -62,6 +62,7 @@ export default function EditEventScreen({
   const [reminderRule, setReminderRule] = useState<ReminderRule>(initialData.reminder);
   const [notes, setNotes] = useState(initialData.notes);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleDateTimeConfirm = (selected: Date): boolean => {
     if (pickerTarget === 'start') {
@@ -83,7 +84,11 @@ export default function EditEventScreen({
     return true;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (submitting) {
+      return;
+    }
+
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       Alert.alert('提示', '请输入日程内容');
@@ -95,15 +100,22 @@ export default function EditEventScreen({
       return;
     }
 
-    onSave({
-      title: trimmedTitle,
-      startTime,
-      endTime,
-      repeat: repeatRule,
-      reminder: reminderRule,
-      notes: notes.trim(),
-      allDay: initialData.allDay,
-    });
+    setSubmitting(true);
+    try {
+      await onSave({
+        title: trimmedTitle,
+        startTime,
+        endTime,
+        repeat: repeatRule,
+        reminder: reminderRule,
+        notes: notes.trim(),
+        allDay: initialData.allDay,
+      });
+    } catch (error) {
+      Alert.alert('提示', error instanceof Error ? error.message : '保存失败');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (subScreen === 'repeat') {

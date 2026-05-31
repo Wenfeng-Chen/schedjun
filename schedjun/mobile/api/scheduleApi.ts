@@ -1,7 +1,8 @@
 import { EventFormData } from '../components/event/CreateEventScreen';
-import { getJsonWithToken, postJsonWithToken, unwrapResult } from './apiClient';
+import { getJsonWithToken, postJsonWithToken, putJsonWithToken, unwrapResult } from './apiClient';
 import {
   eventFormToCreatePayload,
+  eventFormToUpdatePayload,
   ScheduleResponseData,
 } from '../utils/scheduleApiUtils';
 
@@ -26,6 +27,19 @@ export async function createScheduleApi(
   const result = await postJsonWithToken<ScheduleResponseData>(
     '/schedules',
     eventFormToCreatePayload(data),
+    accessToken,
+  );
+  return unwrapResult(result);
+}
+
+export async function updateScheduleApi(
+  accessToken: string,
+  scheduleId: string,
+  data: EventFormData,
+): Promise<ScheduleResponseData> {
+  const result = await putJsonWithToken<ScheduleResponseData>(
+    '/schedules',
+    eventFormToUpdatePayload(scheduleId, data),
     accessToken,
   );
   return unwrapResult(result);

@@ -20,10 +20,10 @@ import MineScreen from './components/profile/MineScreen';
 import MyScheduleScreen from './components/schedule/MyScheduleScreen';
 import ScheduleDetailScreen from './components/schedule/ScheduleDetailScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { createScheduleApi, listSchedulesApi } from './api/scheduleApi';
+import { createScheduleApi, listSchedulesApi, updateScheduleApi } from './api/scheduleApi';
 import { ScheduleItem } from './constants/scheduleTypes';
 import { colors, spacing } from './constants/theme';
-import { formDataToSchedule, scheduleToFormData } from './utils/scheduleDetailUtils';
+import { scheduleToFormData } from './utils/scheduleDetailUtils';
 import { scheduleVoToItem } from './utils/scheduleApiUtils';
 
 type OverlayScreen = 'createEvent' | 'editEvent' | null;
@@ -186,20 +186,27 @@ function MainApp() {
   }, [selectedScheduleId]);
 
   const handleSaveEdit = useCallback(
-    (data: EditEventFormData) => {
+    async (data: EditEventFormData) => {
       if (!editingScheduleId) {
         return;
       }
+
+      if (!isLoggedIn || !accessToken) {
+        throw new Error('请先登录后再更新日程');
+      }
+
+      const updated = await updateScheduleApi(accessToken, editingScheduleId, data);
+      const item = scheduleVoToItem(updated);
       setSchedules((prev) =>
-        prev.map((item) =>
-          item.id === editingScheduleId ? formDataToSchedule(editingScheduleId, data) : item,
-        ),
+        prev
+          .map((schedule) => (schedule.id === editingScheduleId ? item : schedule))
+          .sort((a, b) => a.startTime.getTime() - b.startTime.getTime()),
       );
       setOverlayScreen(null);
       setActiveTab(returnTab);
       setEditingScheduleId(null);
     },
-    [editingScheduleId, returnTab],
+    [editingScheduleId, returnTab, accessToken, isLoggedIn],
   );
 
   const handleCloseEdit = useCallback(() => {

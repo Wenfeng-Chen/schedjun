@@ -45,6 +45,13 @@ export function eventFormToCreatePayload(data: EventFormData) {
   };
 }
 
+export function eventFormToUpdatePayload(scheduleId: string, data: EventFormData) {
+  return {
+    id: scheduleId,
+    ...eventFormToCreatePayload(data),
+  };
+}
+
 export function scheduleVoToItem(vo: ScheduleResponseData): ScheduleItem {
   return {
     id: vo.id,

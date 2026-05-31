@@ -61,16 +61,43 @@ public class ScheduleService {
         LocalDateTime now = LocalDateTime.now();
         Schedule schedule = new Schedule();
         schedule.setUserId(userId);
-        schedule.setTitle(dto.getTitle().trim());
-        schedule.setStartTime(toLocalDateTime(dto.getStartTime()));
-        schedule.setEndTime(toLocalDateTime(dto.getEndTime()));
-        schedule.setNotes(normalizeNotes(dto.getNotes()));
-        schedule.setRepeatJson(toJson(normalizeRepeat(dto.getRepeat())));
-        schedule.setReminderJson(toJson(normalizeReminder(dto.getReminder())));
+        applyScheduleFields(schedule, dto);
         schedule.setSource(DEFAULT_SOURCE);
         schedule.setCreatedAt(now);
         schedule.setUpdatedAt(now);
         scheduleMapper.insert(schedule);
+
+        return toScheduleVO(schedule, resolveTimezone(user));
+    }
+
+    @Transactional
+    public ScheduleVO update(CreateScheduleDTO dto) {
+        Long userId = BaseContext.getCurrentId();
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录");
+        }
+
+        Long scheduleId = parseScheduleId(dto.getId());
+
+        if (!dto.getEndTime().isAfter(dto.getStartTime())) {
+            throw new IllegalArgumentException("结束时间需晚于开始时间");
+        }
+
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+
+        Schedule schedule = scheduleMapper.selectOne(new LambdaQueryWrapper<Schedule>()
+                .eq(Schedule::getId, scheduleId)
+                .eq(Schedule::getUserId, userId));
+        if (schedule == null) {
+            throw new IllegalArgumentException("日程不存在");
+        }
+
+        applyScheduleFields(schedule, dto);
+        schedule.setUpdatedAt(LocalDateTime.now());
+        scheduleMapper.updateById(schedule);
 
         return toScheduleVO(schedule, resolveTimezone(user));
     }
@@ -166,6 +193,32 @@ public class ScheduleService {
 
     static String formatScheduleId(Long id) {
         return "sch_" + id;
+    }
+
+    static Long parseScheduleId(String scheduleId) {
+        if (!StringUtils.hasText(scheduleId)) {
+            throw new IllegalArgumentException("日程 ID 不能为空");
+        }
+
+        String trimmed = scheduleId.trim();
+        if (!trimmed.startsWith("sch_")) {
+            throw new IllegalArgumentException("日程 ID 格式无效");
+        }
+
+        try {
+            return Long.parseLong(trimmed.substring(4));
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("日程 ID 格式无效");
+        }
+    }
+
+    private void applyScheduleFields(Schedule schedule, CreateScheduleDTO dto) {
+        schedule.setTitle(dto.getTitle().trim());
+        schedule.setStartTime(toLocalDateTime(dto.getStartTime()));
+        schedule.setEndTime(toLocalDateTime(dto.getEndTime()));
+        schedule.setNotes(normalizeNotes(dto.getNotes()));
+        schedule.setRepeatJson(toJson(normalizeRepeat(dto.getRepeat())));
+        schedule.setReminderJson(toJson(normalizeReminder(dto.getReminder())));
     }
 
     private ScheduleVO toScheduleVO(Schedule schedule, String timezone) {

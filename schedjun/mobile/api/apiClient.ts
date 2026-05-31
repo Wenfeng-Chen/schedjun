@@ -70,6 +70,18 @@ export async function postJsonWithToken<T>(
   });
 }
 
+export async function putJsonWithToken<T>(
+  path: string,
+  body: unknown,
+  token: string,
+): Promise<ApiResult<T>> {
+  return requestJson<T>(path, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+    token,
+  });
+}
+
 export async function getJson<T>(path: string, token: string): Promise<ApiResult<T>> {
   return requestJson<T>(path, {
     method: 'GET',
