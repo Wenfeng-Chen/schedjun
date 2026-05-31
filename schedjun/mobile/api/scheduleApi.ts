@@ -1,5 +1,5 @@
 import { EventFormData } from '../components/event/CreateEventScreen';
-import { getJsonWithToken, postJsonWithToken, putJsonWithToken, unwrapResult } from './apiClient';
+import { getJsonWithToken, postJsonWithToken, putJsonWithToken, deleteJsonWithToken, unwrapResult } from './apiClient';
 import {
   eventFormToCreatePayload,
   eventFormToUpdatePayload,
@@ -40,6 +40,22 @@ export async function updateScheduleApi(
   const result = await putJsonWithToken<ScheduleResponseData>(
     '/schedules',
     eventFormToUpdatePayload(scheduleId, data),
+    accessToken,
+  );
+  return unwrapResult(result);
+}
+
+export interface ScheduleDeleteData {
+  deleted: boolean;
+  scheduleId: string;
+}
+
+export async function deleteScheduleApi(
+  accessToken: string,
+  scheduleId: string,
+): Promise<ScheduleDeleteData> {
+  const result = await deleteJsonWithToken<ScheduleDeleteData>(
+    `/schedules/${encodeURIComponent(scheduleId)}`,
     accessToken,
   );
   return unwrapResult(result);

@@ -82,6 +82,13 @@ export async function putJsonWithToken<T>(
   });
 }
 
+export async function deleteJsonWithToken<T>(path: string, token: string): Promise<ApiResult<T>> {
+  return requestJson<T>(path, {
+    method: 'DELETE',
+    token,
+  });
+}
+
 export async function getJson<T>(path: string, token: string): Promise<ApiResult<T>> {
   return requestJson<T>(path, {
     method: 'GET',

@@ -9,6 +9,7 @@ import com.schedjun.backend.common.entity.Schedule;
 import com.schedjun.backend.common.entity.User;
 import com.schedjun.backend.common.model.ReminderRule;
 import com.schedjun.backend.common.model.RepeatRule;
+import com.schedjun.backend.common.vo.ScheduleDeleteVO;
 import com.schedjun.backend.common.vo.ScheduleScrollVO;
 import com.schedjun.backend.common.vo.ScheduleVO;
 import com.schedjun.backend.mapper.ScheduleMapper;
@@ -88,18 +89,29 @@ public class ScheduleService {
             throw new IllegalArgumentException("用户不存在");
         }
 
-        Schedule schedule = scheduleMapper.selectOne(new LambdaQueryWrapper<Schedule>()
-                .eq(Schedule::getId, scheduleId)
-                .eq(Schedule::getUserId, userId));
-        if (schedule == null) {
-            throw new IllegalArgumentException("日程不存在");
-        }
-
+        Schedule schedule = requireOwnedSchedule(userId, scheduleId);
         applyScheduleFields(schedule, dto);
         schedule.setUpdatedAt(LocalDateTime.now());
         scheduleMapper.updateById(schedule);
 
         return toScheduleVO(schedule, resolveTimezone(user));
+    }
+
+    @Transactional
+    public ScheduleDeleteVO delete(String scheduleIdParam) {
+        Long userId = BaseContext.getCurrentId();
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录");
+        }
+
+        Long scheduleId = parseScheduleId(scheduleIdParam);
+        requireOwnedSchedule(userId, scheduleId);
+
+        scheduleMapper.delete(new LambdaQueryWrapper<Schedule>()
+                .eq(Schedule::getId, scheduleId)
+                .eq(Schedule::getUserId, userId));
+
+        return new ScheduleDeleteVO(true, formatScheduleId(scheduleId));
     }
 
     public ScheduleScrollVO scrollList(String startDate, String endDate, String keyword, String cursor, int limit) {
@@ -219,6 +231,16 @@ public class ScheduleService {
         schedule.setNotes(normalizeNotes(dto.getNotes()));
         schedule.setRepeatJson(toJson(normalizeRepeat(dto.getRepeat())));
         schedule.setReminderJson(toJson(normalizeReminder(dto.getReminder())));
+    }
+
+    private Schedule requireOwnedSchedule(Long userId, Long scheduleId) {
+        Schedule schedule = scheduleMapper.selectOne(new LambdaQueryWrapper<Schedule>()
+                .eq(Schedule::getId, scheduleId)
+                .eq(Schedule::getUserId, userId));
+        if (schedule == null) {
+            throw new IllegalArgumentException("日程不存在");
+        }
+        return schedule;
     }
 
     private ScheduleVO toScheduleVO(Schedule schedule, String timezone) {

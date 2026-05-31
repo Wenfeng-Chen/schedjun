@@ -7,6 +7,14 @@ spring:
     url: jdbc:mysql://127.0.0.1:3306/schedjun?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: your-username
     password: your-password
+   ai:
+    deepseek:
+      api-key: your-api-key
+      base-url: https://api.deepseek.com
+      chat:
+        options:
+          model: deepseek-chat
+          temperature: 0.2    # 日程解析偏结构化，温度低一点
 
 mybatis-plus:
   configuration:
@@ -26,3 +34,12 @@ schedjun:
   jwt:
     secret: wo-neng-xing
     expires-in: 720000
+  iflytek:
+    asr:
+      app-id: your-app-id
+      api-key: your-api-key
+      api-secret: your-api-secret
+      host: iat-api.xfyun.cn
+      path: /v2/iat
+      language: zh_cn
+      sample-rate: 16000

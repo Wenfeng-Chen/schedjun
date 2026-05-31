@@ -6,6 +6,7 @@ import com.schedjun.backend.common.dto.CreateScheduleDTO;
 
 import com.schedjun.backend.common.result.Result;
 
+import com.schedjun.backend.common.vo.ScheduleDeleteVO;
 import com.schedjun.backend.common.vo.ScheduleScrollVO;
 
 import com.schedjun.backend.common.vo.ScheduleVO;
@@ -18,8 +19,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Autowired;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 
 import org.springframework.web.bind.annotation.PutMapping;
@@ -64,6 +66,12 @@ public class ScheduleController {
     public Result<ScheduleVO> update(@Valid @RequestBody CreateScheduleDTO dto) {
         log.info("更新日程: {}", dto);
         return Result.success(scheduleService.update(dto));
+    }
+
+    @DeleteMapping("/{scheduleId}")
+    public Result<ScheduleDeleteVO> delete(@PathVariable String scheduleId) {
+        log.info("删除日程: {}", scheduleId);
+        return Result.success(scheduleService.delete(scheduleId));
     }
 
     @GetMapping
