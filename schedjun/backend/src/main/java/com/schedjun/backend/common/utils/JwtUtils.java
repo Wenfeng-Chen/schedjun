@@ -40,12 +40,19 @@ public class JwtUtils {
                 .compact();
     }
 
-    public Long parseUserId(String token) {
-        Claims claims = Jwts.parser()
+    public Claims parseClaims(String token) {
+        return Jwts.parser()
                 .verifyWith(secretKey)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
-        return Long.parseLong(claims.getSubject());
+    }
+
+    public Long parseUserId(String token) {
+        return Long.parseLong(parseClaims(token).getSubject());
+    }
+
+    public String parseUsername(String token) {
+        return parseClaims(token).get("username", String.class);
     }
 }

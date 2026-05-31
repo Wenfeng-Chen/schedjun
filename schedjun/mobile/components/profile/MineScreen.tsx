@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { fonts } from '../../constants/fonts';
 import { colors, radius, spacing } from '../../constants/theme';
+import { formatUserCreatedAt } from '../../constants/userTypes';
 import AuthScreen, { AuthMode } from './AuthScreen';
 import DefaultAvatar from './DefaultAvatar';
 
@@ -53,6 +54,7 @@ function MenuRow({ item }: { item: MenuItem }) {
 export default function MineScreen({ scheduleCount, bottomInset }: MineScreenProps) {
   const { user, isLoggedIn, logout } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+  const joinedAt = formatUserCreatedAt(user?.createdAt);
 
   const handleLogout = () => {
     Alert.alert('退出登录', '确定退出当前账号？', [
@@ -112,6 +114,13 @@ export default function MineScreen({ scheduleCount, bottomInset }: MineScreenPro
               <>
                 <Text style={styles.displayName}>{user.username}</Text>
                 <Text style={styles.username}>@{user.username}</Text>
+                {(user.timezone || joinedAt) && (
+                  <Text style={styles.profileMeta}>
+                    {[user.timezone, joinedAt ? `注册于 ${joinedAt}` : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                )}
               </>
             ) : (
               <>
@@ -206,6 +215,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 13,
     color: colors.textSecondary,
+  },
+  profileMeta: {
+    marginTop: 6,
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.textMuted,
   },
   authActions: {
     flexDirection: 'row',
