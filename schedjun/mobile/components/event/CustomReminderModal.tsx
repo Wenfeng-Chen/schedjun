@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   CustomReminderConfig,
@@ -10,6 +10,7 @@ import {
 import { fonts } from '../../constants/fonts';
 import { colors, radius, spacing } from '../../constants/theme';
 import { formatCustomReminderLabel } from '../../utils/reminderUtils';
+import WheelColumn, { wheelStyles } from './WheelColumn';
 
 interface CustomReminderModalProps {
   visible: boolean;
@@ -18,7 +19,13 @@ interface CustomReminderModalProps {
   onClose: () => void;
 }
 
-const VALUE_OPTIONS = Array.from({ length: MAX_REMINDER_VALUE }, (_, index) => index + 1);
+const VALUE_OPTIONS = Array.from({ length: MAX_REMINDER_VALUE }, (_, index) => String(index + 1));
+const UNIT_OPTIONS = REMINDER_TIME_UNITS.map((option) => option.label);
+
+function unitIndexFromValue(unit: ReminderTimeUnit): number {
+  const index = REMINDER_TIME_UNITS.findIndex((option) => option.value === unit);
+  return index >= 0 ? index : 0;
+}
 
 export default function CustomReminderModal({
   visible,
@@ -26,20 +33,25 @@ export default function CustomReminderModal({
   onConfirm,
   onClose,
 }: CustomReminderModalProps) {
-  const [draftValue, setDraftValue] = useState(value.value);
-  const [draftUnit, setDraftUnit] = useState<ReminderTimeUnit>(value.unit);
+  const [valueIndex, setValueIndex] = useState(value.value - 1);
+  const [unitIndex, setUnitIndex] = useState(unitIndexFromValue(value.unit));
 
   useEffect(() => {
     if (visible) {
-      setDraftValue(value.value);
-      setDraftUnit(value.unit);
+      setValueIndex(value.value - 1);
+      setUnitIndex(unitIndexFromValue(value.unit));
     }
   }, [visible, value]);
 
-  const preview = useMemo(
-    () => formatCustomReminderLabel({ value: draftValue, unit: draftUnit }),
-    [draftValue, draftUnit],
+  const draft = useMemo(
+    () => ({
+      value: valueIndex + 1,
+      unit: REMINDER_TIME_UNITS[unitIndex].value,
+    }),
+    [unitIndex, valueIndex],
   );
+
+  const preview = useMemo(() => formatCustomReminderLabel(draft), [draft]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -48,44 +60,20 @@ export default function CustomReminderModal({
           <Text style={styles.title}>自定义</Text>
           <Text style={styles.preview}>{preview}</Text>
 
-          <View style={styles.pickerRow}>
-            <ScrollView style={styles.column} bounces={false} showsVerticalScrollIndicator={false}>
-              {VALUE_OPTIONS.map((option) => {
-                const isSelected = option === draftValue;
-                return (
-                  <Pressable
-                    key={option}
-                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                    onPress={() => setDraftValue(option)}
-                  >
-                    <Text
-                      style={[styles.pickerValue, isSelected && styles.pickerValueSelected]}
-                    >
-                      {option}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <ScrollView style={styles.column} bounces={false} showsVerticalScrollIndicator={false}>
-              {REMINDER_TIME_UNITS.map((option) => {
-                const isSelected = option.value === draftUnit;
-                return (
-                  <Pressable
-                    key={option.value}
-                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                    onPress={() => setDraftUnit(option.value)}
-                  >
-                    <Text
-                      style={[styles.pickerUnit, isSelected && styles.pickerUnitSelected]}
-                    >
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+          <View style={wheelStyles.frame}>
+            <View style={wheelStyles.highlight} />
+            <WheelColumn
+              items={VALUE_OPTIONS}
+              selectedIndex={valueIndex}
+              onSelect={setValueIndex}
+              width="50%"
+            />
+            <WheelColumn
+              items={UNIT_OPTIONS}
+              selectedIndex={unitIndex}
+              onSelect={setUnitIndex}
+              width="50%"
+            />
           </View>
 
           <View style={styles.actions}>
@@ -95,7 +83,7 @@ export default function CustomReminderModal({
             <Pressable
               style={styles.confirmButton}
               onPress={() => {
-                onConfirm({ value: draftValue, unit: draftUnit });
+                onConfirm(draft);
                 onClose();
               }}
             >
@@ -139,44 +127,10 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textAlign: 'center',
   },
-  pickerRow: {
-    flexDirection: 'row',
-    height: 160,
-    marginBottom: spacing.lg,
-  },
-  column: {
-    flex: 1,
-  },
-  pickerItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-  },
-  pickerItemSelected: {
-    backgroundColor: colors.primaryLight,
-    borderRadius: radius.md,
-  },
-  pickerValue: {
-    fontFamily: fonts.bodySemiBold,
-    fontSize: 22,
-    color: colors.textSecondary,
-  },
-  pickerValueSelected: {
-    fontSize: 28,
-    color: colors.primary,
-  },
-  pickerUnit: {
-    fontFamily: fonts.body,
-    fontSize: 16,
-    color: colors.textSecondary,
-  },
-  pickerUnitSelected: {
-    fontFamily: fonts.bodySemiBold,
-    color: colors.primary,
-  },
   actions: {
     flexDirection: 'row',
     gap: spacing.sm,
+    marginTop: spacing.md,
   },
   cancelButton: {
     flex: 1,
