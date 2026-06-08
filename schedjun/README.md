@@ -93,7 +93,7 @@ cd schedjun
 ### 3. 启动后端
 
 ```bash
-cd backend
+cd schedjun/backend
 cp src/main/resources/application.yaml.example src/main/resources/application.yaml
 # 编辑 application.yaml，填写数据库、DeepSeek、讯飞 ASR 等配置
 

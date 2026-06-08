@@ -38,6 +38,14 @@ export function monthDiff(from: MonthRef, to: MonthRef): number {
   return (from.year - to.year) * 12 + (from.month - to.month);
 }
 
+/** 切换月份时的默认选中：当前月选今天，其他月选 1 号 */
+export function defaultSelectedDateForMonth(month: MonthRef, today: Date): Date {
+  if (isSameMonthRef(month, createMonthRef(today))) {
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  }
+  return new Date(month.year, month.month, 1);
+}
+
 export function generateMonthRange(center: MonthRef, total: number): MonthRef[] {
   const half = Math.floor(total / 2);
   return Array.from({ length: total }, (_, index) => addMonths(center, index - half));

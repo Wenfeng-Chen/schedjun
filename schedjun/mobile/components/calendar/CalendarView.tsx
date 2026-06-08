@@ -5,6 +5,7 @@ import { colors, radius, spacing } from '../../constants/theme';
 import {
   addMonths,
   createMonthRef,
+  defaultSelectedDateForMonth,
   isSameDay,
   monthDiff,
 } from '../../utils/calendarUtils';
@@ -75,11 +76,11 @@ export default function CalendarView({
         const newMonth = addMonths(baseMonth, newOffset);
         return {
           monthOffset: newOffset,
-          selectedDate: new Date(newMonth.year, newMonth.month, 1),
+          selectedDate: defaultSelectedDateForMonth(newMonth, today),
         };
       });
     },
-    [baseMonth],
+    [baseMonth, today],
   );
 
   const handleSelectDate = useCallback(
