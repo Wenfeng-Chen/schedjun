@@ -34,7 +34,9 @@ public class IflytekAsrClient {
     /** 16kHz 16bit mono: 1280 bytes ≈ 40ms */
     private static final int FRAME_SIZE = 1280;
     private static final int FRAME_INTERVAL_MS = 40;
-    private static final DateTimeFormatter RFC1123 = DateTimeFormatter.RFC_1123_DATE_TIME;
+    private static final DateTimeFormatter IFLYTEK_DATE = DateTimeFormatter
+    .ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US)
+    .withZone(ZoneOffset.UTC);
 
     private final IflytekAsrProperties properties;
     private final ObjectMapper objectMapper;
@@ -335,7 +337,7 @@ public class IflytekAsrClient {
     private String buildAuthUrl() throws Exception {
         String host = properties.getHost();
         String path = properties.getPath();
-        String date = RFC1123.format(ZonedDateTime.now(ZoneOffset.UTC));
+        String date = IFLYTEK_DATE.format(ZonedDateTime.now(ZoneOffset.UTC));
 
         String signatureOrigin = "host: " + host + "\n"
                 + "date: " + date + "\n"
