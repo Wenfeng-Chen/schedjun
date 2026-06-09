@@ -93,11 +93,7 @@ cd schedjun
 ### 3. 启动后端
 
 ```bash
-cd schedjun/backend
-cp src/main/resources/application.yaml.example src/main/resources/application.yaml
-# 编辑 application.yaml，填写数据库、DeepSeek、讯飞 ASR 等配置
-
-mvn spring-boot:run
+cd schedjun/backend && mvn spring-boot:run
 ```
 
 后端默认地址：`http://localhost:8080/api/v1`
@@ -105,9 +101,7 @@ mvn spring-boot:run
 ### 4. 启动移动端
 
 ```bash
-cd mobile
-npm install
-npx expo start
+cd schedjun/mobile && npm install && npx expo run:android
 ```
 
 真机调试时，若无法连接后端，请在 `mobile/constants/apiConfig.ts` 中将 `MANUAL_API_HOST` 设置为电脑的局域网 IP。
