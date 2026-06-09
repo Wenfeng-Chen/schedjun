@@ -7,6 +7,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
+import { useScheduleExactAlarmPermission } from 'expo-exact-alarms-permission';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,6 +26,10 @@ import { ScheduleItem } from './constants/scheduleTypes';
 import { colors, spacing } from './constants/theme';
 import { scheduleToFormData } from './utils/scheduleDetailUtils';
 import { scheduleVoToItem } from './utils/scheduleApiUtils';
+import {
+  scheduleReminderForSchedule,
+  syncScheduleReminders,
+} from './utils/scheduleReminderNotifications';
 
 type OverlayScreen = 'createEvent' | 'editEvent' | null;
 
@@ -38,6 +43,8 @@ function MainApp() {
   const [returnTab, setReturnTab] = useState<MainTab>('calendar');
   const [createEventDate, setCreateEventDate] = useState<Date>(() => new Date());
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const hasExactAlarm = useScheduleExactAlarmPermission();
+  const hadExactAlarmRef = useRef(hasExactAlarm);
   const [hasMoreSchedules, setHasMoreSchedules] = useState(false);
   const [loadingMoreSchedules, setLoadingMoreSchedules] = useState(false);
   const nextScheduleCursorRef = useRef<string | null>(null);
@@ -118,6 +125,36 @@ function MainApp() {
     });
   }, [isBootstrapping, isLoggedIn, accessToken, loadSchedules]);
 
+  useEffect(() => {
+    if (isBootstrapping || !isLoggedIn) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      syncScheduleReminders(schedules).catch((error) => {
+        console.error('[reminder] sync failed:', error);
+      });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [isBootstrapping, isLoggedIn, schedules]);
+
+  // 用户从设置页开启精确闹钟后，重新注册系统通知（从不精确切换为精确）
+  useEffect(() => {
+    if (isBootstrapping || !isLoggedIn) {
+      return;
+    }
+
+    const becameGranted = !hadExactAlarmRef.current && hasExactAlarm;
+    hadExactAlarmRef.current = hasExactAlarm;
+
+    if (becameGranted) {
+      syncScheduleReminders(schedules).catch((error) => {
+        console.error('[reminder] resync after exact alarm grant failed:', error);
+      });
+    }
+  }, [hasExactAlarm, isBootstrapping, isLoggedIn, schedules]);
+
   const selectedSchedule = useMemo(
     () => schedules.find((item) => item.id === selectedScheduleId) ?? null,
     [schedules, selectedScheduleId],
@@ -156,6 +193,7 @@ function MainApp() {
       setSchedules((prev) =>
         [...prev, item].sort((a, b) => a.startTime.getTime() - b.startTime.getTime()),
       );
+      await scheduleReminderForSchedule(item);
     },
     [accessToken, isLoggedIn],
   );
@@ -213,6 +251,7 @@ function MainApp() {
           .map((schedule) => (schedule.id === editingScheduleId ? item : schedule))
           .sort((a, b) => a.startTime.getTime() - b.startTime.getTime()),
       );
+      await scheduleReminderForSchedule(item);
       setOverlayScreen(null);
       setActiveTab(returnTab);
       setEditingScheduleId(null);
@@ -231,30 +270,84 @@ function MainApp() {
     setActiveTab(returnTab);
   }, [returnTab]);
 
-  if (overlayScreen === 'createEvent') {
-    return (
-      <>
-        <StatusBar style="dark" />
-        <CreateEventScreen
-          initialDate={createEventDate}
-          onClose={handleCloseCreate}
-          onSave={handleSaveEvent}
-        />
-        <FloatingAssistant onScheduleCreated={loadSchedules} />
-      </>
-    );
-  }
+  let screenContent;
 
-  if (overlayScreen === 'editEvent' && editingSchedule) {
-    return (
+  if (overlayScreen === 'createEvent') {
+    screenContent = (
+      <CreateEventScreen
+        initialDate={createEventDate}
+        onClose={handleCloseCreate}
+        onSave={handleSaveEvent}
+      />
+    );
+  } else if (overlayScreen === 'editEvent' && editingSchedule) {
+    screenContent = (
+      <EditEventScreen
+        initialData={scheduleToFormData(editingSchedule)}
+        onClose={handleCloseEdit}
+        onSave={handleSaveEdit}
+      />
+    );
+  } else {
+    screenContent = (
       <>
-        <StatusBar style="dark" />
-        <EditEventScreen
-          initialData={scheduleToFormData(editingSchedule)}
-          onClose={handleCloseEdit}
-          onSave={handleSaveEdit}
-        />
-        <FloatingAssistant onScheduleCreated={loadSchedules} />
+        <View style={styles.main}>
+          {activeTab === 'calendar' && (
+            <LinearGradient
+              colors={[colors.backgroundWarm, colors.backgroundCool]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gradient}
+            >
+              <SafeAreaView style={styles.container} edges={['top']}>
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={[
+                    styles.scrollContent,
+                    { paddingBottom: tabBarInset + spacing.sm },
+                  ]}
+                >
+                  <CalendarView
+                    schedules={schedules}
+                    onAddPress={handleCalendarAddPress}
+                    onSchedulePress={openScheduleDetail}
+                  />
+                </ScrollView>
+              </SafeAreaView>
+            </LinearGradient>
+          )}
+
+          {activeTab === 'schedules' && (
+            <MyScheduleScreen
+              embedded
+              schedules={schedules}
+              onSchedulesChange={setSchedules}
+              onAddPress={handleScheduleAddPress}
+              onSchedulePress={openScheduleDetail}
+              onLoadMore={loadMoreSchedules}
+              hasMore={hasMoreSchedules}
+              loadingMore={loadingMoreSchedules}
+              bottomInset={tabBarInset}
+            />
+          )}
+
+          {activeTab === 'mine' && (
+            <MineScreen scheduleCount={schedules.length} bottomInset={tabBarInset} />
+          )}
+
+          <View style={styles.tabBarWrap}>
+            <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+          </View>
+        </View>
+
+        {selectedSchedule && (
+          <ScheduleDetailScreen
+            schedule={selectedSchedule}
+            onClose={closeScheduleDetail}
+            onEdit={openScheduleEdit}
+            onDelete={handleDeleteSchedule}
+          />
+        )}
       </>
     );
   }
@@ -262,64 +355,7 @@ function MainApp() {
   return (
     <>
       <StatusBar style="dark" />
-      <View style={styles.main}>
-        {activeTab === 'calendar' && (
-          <LinearGradient
-            colors={[colors.backgroundWarm, colors.backgroundCool]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.gradient}
-          >
-            <SafeAreaView style={styles.container} edges={['top']}>
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={[
-                  styles.scrollContent,
-                  { paddingBottom: tabBarInset + spacing.sm },
-                ]}
-              >
-                <CalendarView
-                  schedules={schedules}
-                  onAddPress={handleCalendarAddPress}
-                  onSchedulePress={openScheduleDetail}
-                />
-              </ScrollView>
-            </SafeAreaView>
-          </LinearGradient>
-        )}
-
-        {activeTab === 'schedules' && (
-          <MyScheduleScreen
-            embedded
-            schedules={schedules}
-            onSchedulesChange={setSchedules}
-            onAddPress={handleScheduleAddPress}
-            onSchedulePress={openScheduleDetail}
-            onLoadMore={loadMoreSchedules}
-            hasMore={hasMoreSchedules}
-            loadingMore={loadingMoreSchedules}
-            bottomInset={tabBarInset}
-          />
-        )}
-
-        {activeTab === 'mine' && (
-          <MineScreen scheduleCount={schedules.length} bottomInset={tabBarInset} />
-        )}
-
-        <View style={styles.tabBarWrap}>
-          <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} />
-        </View>
-      </View>
-
-      {selectedSchedule && (
-        <ScheduleDetailScreen
-          schedule={selectedSchedule}
-          onClose={closeScheduleDetail}
-          onEdit={openScheduleEdit}
-          onDelete={handleDeleteSchedule}
-        />
-      )}
-
+      {screenContent}
       <FloatingAssistant onScheduleCreated={loadSchedules} />
     </>
   );

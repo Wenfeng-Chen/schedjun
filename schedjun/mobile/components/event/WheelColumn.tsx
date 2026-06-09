@@ -41,8 +41,17 @@ export default function WheelColumn({
   const indexRef = useRef(selectedIndex);
   const isDraggingRef = useRef(false);
   const skipSyncRef = useRef(false);
+  const pendingMomentumRef = useRef(false);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [highlightIndex, setHighlightIndex] = useState(selectedIndex);
+
+  const clearSettleTimer = useCallback(() => {
+    if (settleTimerRef.current) {
+      clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
+    }
+  }, []);
 
   const scrollToIndex = useCallback((index: number, animated: boolean) => {
     scrollRef.current?.scrollTo({
@@ -57,54 +66,88 @@ export default function WheelColumn({
       skipSyncRef.current = false;
       return;
     }
+    if (isDraggingRef.current || pendingMomentumRef.current) {
+      return;
+    }
     setHighlightIndex(selectedIndex);
     scrollToIndex(selectedIndex, false);
   }, [selectedIndex, scrollToIndex]);
 
-  const settleAtOffset = useCallback(
-    (offsetY: number, animated: boolean) => {
-      const index = indexFromOffset(offsetY, maxIndex);
+  const commitIndex = useCallback(
+    (index: number) => {
       indexRef.current = index;
       setHighlightIndex(index);
-
       if (index !== selectedIndex) {
         skipSyncRef.current = true;
         onSelect(index);
       }
+    },
+    [onSelect, selectedIndex],
+  );
+
+  const settleAtOffset = useCallback(
+    (offsetY: number, animated: boolean) => {
+      clearSettleTimer();
+
+      const index = indexFromOffset(offsetY, maxIndex);
+      const targetY = index * WHEEL_ITEM_HEIGHT;
+
+      commitIndex(index);
+
+      if (Math.abs(offsetY - targetY) < 0.5) {
+        return;
+      }
 
       scrollToIndex(index, animated);
     },
-    [maxIndex, onSelect, scrollToIndex, selectedIndex],
+    [clearSettleTimer, commitIndex, maxIndex, scrollToIndex],
   );
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (!isDraggingRef.current) {
+    if (!isDraggingRef.current && !pendingMomentumRef.current) {
       return;
     }
     const index = indexFromOffset(event.nativeEvent.contentOffset.y, maxIndex);
-    setHighlightIndex(index);
+    if (index !== highlightIndex) {
+      setHighlightIndex(index);
+    }
   };
 
   const handleScrollBeginDrag = () => {
+    clearSettleTimer();
+    pendingMomentumRef.current = false;
     isDraggingRef.current = true;
   };
 
   const handleScrollEndDrag = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     isDraggingRef.current = false;
     const velocityY = event.nativeEvent.velocity?.y ?? 0;
-    if (Math.abs(velocityY) <= 0.05) {
-      settleAtOffset(event.nativeEvent.contentOffset.y, true);
+
+    // 有明显惯性时交给 onMomentumScrollEnd，避免连续两次 scrollTo 打架
+    if (Math.abs(velocityY) > 0.15) {
+      pendingMomentumRef.current = true;
+      return;
     }
+
+    pendingMomentumRef.current = false;
+    settleAtOffset(event.nativeEvent.contentOffset.y, false);
   };
 
   const handleMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     isDraggingRef.current = false;
-    settleAtOffset(event.nativeEvent.contentOffset.y, true);
+    pendingMomentumRef.current = false;
+    settleAtOffset(event.nativeEvent.contentOffset.y, false);
   };
 
   const handleItemPress = (index: number) => {
-    settleAtOffset(index * WHEEL_ITEM_HEIGHT, true);
+    clearSettleTimer();
+    pendingMomentumRef.current = false;
+    isDraggingRef.current = false;
+    commitIndex(index);
+    scrollToIndex(index, true);
   };
+
+  useEffect(() => clearSettleTimer, [clearSettleTimer]);
 
   return (
     <View style={[styles.column, { width }]}>
@@ -113,7 +156,8 @@ export default function WheelColumn({
         showsVerticalScrollIndicator={false}
         snapToInterval={WHEEL_ITEM_HEIGHT}
         snapToAlignment="start"
-        decelerationRate="normal"
+        decelerationRate="fast"
+        disableIntervalMomentum
         nestedScrollEnabled
         scrollEventThrottle={16}
         contentContainerStyle={{ paddingVertical }}
