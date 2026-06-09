@@ -6,7 +6,8 @@ import { Platform } from 'react-native';
  * 真机连不上时，填电脑局域网 IP，例如 '192.168.1.100'
  * 留空则优先从 Expo 调试地址自动解析
  */
-const MANUAL_API_HOST = '';
+// 填电脑在 WiFi/局域网上的 IPv4（ipconfig 里非 172.x 虚拟网卡那条），手机才能连上
+const MANUAL_API_HOST = '10.15.2.181';
 
 function parseHostFromDebugger(value: string | undefined | null): string | null {
   if (!value) {

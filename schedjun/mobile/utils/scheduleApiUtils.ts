@@ -1,7 +1,8 @@
 import { EventFormData } from '../components/event/CreateEventScreen';
-import { ReminderRule } from '../constants/reminderConfig';
-import { RepeatRule } from '../constants/repeatConfig';
+import { DEFAULT_REMINDER_RULE, ReminderRule } from '../constants/reminderConfig';
+import { DEFAULT_REPEAT_RULE, RepeatRule } from '../constants/repeatConfig';
 import { ScheduleItem } from '../constants/scheduleTypes';
+import { floorToMinute, parseScheduleDateTime } from './dateTimeUtils';
 
 export interface ScheduleResponseData {
   id: string;
@@ -21,14 +22,15 @@ function pad(value: number): string {
 }
 
 export function formatOffsetDateTime(date: Date): string {
-  const timezoneOffsetMinutes = -date.getTimezoneOffset();
+  const normalized = floorToMinute(date);
+  const timezoneOffsetMinutes = -normalized.getTimezoneOffset();
   const sign = timezoneOffsetMinutes >= 0 ? '+' : '-';
   const offsetHours = pad(Math.floor(Math.abs(timezoneOffsetMinutes) / 60));
   const offsetMinutes = pad(Math.abs(timezoneOffsetMinutes) % 60);
 
   return (
-    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+    `${normalized.getFullYear()}-${pad(normalized.getMonth() + 1)}-${pad(normalized.getDate())}` +
+    `T${pad(normalized.getHours())}:${pad(normalized.getMinutes())}:00` +
     `${sign}${offsetHours}:${offsetMinutes}`
   );
 }
@@ -56,11 +58,11 @@ export function scheduleVoToItem(vo: ScheduleResponseData): ScheduleItem {
   return {
     id: vo.id,
     title: vo.title,
-    startTime: new Date(vo.startTime),
-    endTime: new Date(vo.endTime),
+    startTime: parseScheduleDateTime(vo.startTime),
+    endTime: parseScheduleDateTime(vo.endTime),
     notes: vo.notes ?? '',
-    repeat: vo.repeat,
-    reminder: vo.reminder,
+    repeat: vo.repeat ?? DEFAULT_REPEAT_RULE,
+    reminder: vo.reminder ?? DEFAULT_REMINDER_RULE,
     allDay: false,
   };
 }
