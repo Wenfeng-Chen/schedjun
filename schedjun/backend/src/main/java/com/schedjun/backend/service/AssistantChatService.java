@@ -1,84 +1,99 @@
 package com.schedjun.backend.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.schedjun.backend.common.model.AssistantAiResult;
+import com.schedjun.backend.common.model.AssistantToolResult;
+import com.schedjun.backend.common.model.ReminderRule;
+import com.schedjun.backend.common.model.RepeatRule;
+import com.schedjun.backend.common.model.ScheduleDraft;
+import com.schedjun.backend.tool.CreateScheduleToolRequest;
+import com.schedjun.backend.tool.ScheduleTools;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
+@Slf4j
 @Service
 public class AssistantChatService {
-
-    private static final Pattern JSON_BLOCK = Pattern.compile("```(?:json)?\\s*(.*?)\\s*```", Pattern.DOTALL);
 
     @Autowired
     private ChatClient assistantChatClient;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private ScheduleTools scheduleTools;
 
-    public AssistantAiResult analyze(
+    public AssistantToolResult analyze(
             String asrText,
             List<Message> history,
             String timezone,
-            String currentTime,
-            String existingSchedulesJson
+            String currentTime
     ) {
         String contextPrompt = """
                 [context]
                 timezone=%s
                 currentTime=%s
-                existingSchedules=%s
-                """.formatted(timezone, currentTime, existingSchedulesJson);
+                """.formatted(timezone, currentTime);
 
-        String raw = assistantChatClient.prompt()
-                .messages(history)
-                .user(asrText + "\n\n" + contextPrompt)
-                .call()
-                .content();
-
-        return parseResult(raw);
-    }
-
-    private AssistantAiResult parseResult(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            throw new IllegalStateException("AI 未返回有效内容");
-        }
-
-        String json = extractJson(raw.trim());
         try {
-            AssistantAiResult result = objectMapper.readValue(json, AssistantAiResult.class);
-            if (!StringUtils.hasText(result.getReply())) {
-                result.setReply("好的，我已收到。");
+            String reply = assistantChatClient.prompt()
+                    .messages(history)
+                    .user(asrText + "\n\n" + contextPrompt)
+                    .tools(scheduleTools)
+                    .call()
+                    .content();
+
+            CreateScheduleToolRequest pendingRequest = ScheduleTools.consumePendingRequest();
+            boolean toolCalled = pendingRequest != null;
+
+            String intent;
+            ScheduleDraft draft = null;
+
+            if (toolCalled) {
+                intent = "create_schedule";
+                draft = buildDraft(pendingRequest);
+            } else {
+                intent = "chitchat";
+                if (StringUtils.hasText(reply) && isClarify(reply)) {
+                    intent = "clarify";
+                }
             }
-            if (!StringUtils.hasText(result.getIntent())) {
-                result.setIntent("chitchat");
-            }
-            if (result.getNeedConfirm() == null) {
-                result.setNeedConfirm(false);
-            }
-            return result;
+
+            log.info("AI 分析结果: intent={}, toolCalled={}, reply={}", intent, toolCalled, reply);
+            return new AssistantToolResult(reply, intent, toolCalled, draft);
+        } catch (IllegalStateException ex) {
+            throw ex;
         } catch (Exception ex) {
-            throw new IllegalStateException("AI 响应解析失败", ex);
+            log.error("AI 服务调用失败", ex);
+            throw new IllegalStateException("AI 服务暂时不可用，请稍后重试", ex);
         }
     }
 
-    private String extractJson(String raw) {
-        Matcher matcher = JSON_BLOCK.matcher(raw);
-        if (matcher.find()) {
-            return matcher.group(1).trim();
-        }
-        int start = raw.indexOf('{');
-        int end = raw.lastIndexOf('}');
-        if (start >= 0 && end > start) {
-            return raw.substring(start, end + 1);
-        }
-        return raw;
+    private ScheduleDraft buildDraft(CreateScheduleToolRequest request) {
+        ScheduleDraft draft = new ScheduleDraft();
+        draft.setTitle(request.getTitle().trim());
+        draft.setStartTime(OffsetDateTime.parse(request.getStartTime().trim()));
+        draft.setEndTime(OffsetDateTime.parse(request.getEndTime().trim()));
+        draft.setNotes(request.getNotes() != null ? request.getNotes().trim() : "");
+        draft.setAllDay(Boolean.TRUE.equals(request.getAllDay()));
+
+        RepeatRule repeat = new RepeatRule();
+        repeat.setPreset(StringUtils.hasText(request.getRepeatPreset()) ? request.getRepeatPreset().trim() : "never");
+        draft.setRepeat(repeat);
+
+        ReminderRule reminder = new ReminderRule();
+        reminder.setEnabled(!Boolean.FALSE.equals(request.getReminderEnabled()));
+        reminder.setPreset(StringUtils.hasText(request.getReminderPreset()) ? request.getReminderPreset().trim() : "atStart");
+        draft.setReminder(reminder);
+
+        return draft;
+    }
+
+    private boolean isClarify(String reply) {
+        return reply.contains("请问") || reply.contains("请提供") || reply.contains("不确定")
+                || reply.contains("哪个") || reply.contains("哪条");
     }
 }

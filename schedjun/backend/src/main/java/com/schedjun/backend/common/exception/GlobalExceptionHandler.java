@@ -3,6 +3,7 @@ package com.schedjun.backend.common.exception;
 import com.schedjun.backend.common.result.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -25,10 +26,18 @@ public class GlobalExceptionHandler {
         return Result.error(ex.getMessage());
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public Result<Void> handleUnreadable(HttpMessageNotReadableException ex) {
+        log.warn("Request body parse failed", ex);
+        return Result.error("请求参数格式无效");
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     public Result<Void> handleIllegalState(IllegalStateException ex) {
         String message = ex.getMessage();
-        if (message != null && (message.startsWith("语音识别") || message.startsWith("AI ") || message.startsWith("讯飞"))) {
+        if (message != null && (message.startsWith("语音识别")
+                || message.startsWith("AI ")
+                || message.startsWith("讯飞"))) {
             return Result.error(message);
         }
         log.error("Unhandled illegal state", ex);

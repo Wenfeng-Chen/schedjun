@@ -34,6 +34,11 @@ public class AssistantIntentResolver {
     private static final Pattern CREATE_PATTERN = Pattern.compile(
             "创建|新建|新增|添加|安排|订|预约|提醒我|记一下|帮我记"
     );
+    private static final Pattern SCHEDULE_HINT_NOISE = Pattern.compile(
+            "删除|删掉|去掉|移除|不要了|取消掉|删了|删去|改到|改成|改为|修改|调整|"
+                    + "今天|明天|后天|大后天|上午|下午|晚上|早上|早晨|凌晨|"
+                    + "的|日程|安排|一下|这个|那条|那条|帮我|请|把"
+    );
 
     public AssistantAiResult refine(
             String asrText,
@@ -187,18 +192,17 @@ public class AssistantIntentResolver {
 
         List<ScheduleVO> candidates = dayCandidates.isEmpty() ? schedules : dayCandidates;
 
-        List<ScheduleVO> titleMatches = new ArrayList<>();
+        List<ScheduleVO> descriptionMatches = new ArrayList<>();
         for (ScheduleVO schedule : candidates) {
-            if (StringUtils.hasText(schedule.getTitle())
-                    && normalizedAsr.contains(schedule.getTitle().replace(" ", ""))) {
-                titleMatches.add(schedule);
+            if (matchesDescription(normalizedAsr, schedule)) {
+                descriptionMatches.add(schedule);
             }
         }
-        if (titleMatches.size() == 1) {
-            return Optional.of(titleMatches.get(0));
+        if (descriptionMatches.size() == 1) {
+            return Optional.of(descriptionMatches.get(0));
         }
-        if (titleMatches.size() > 1) {
-            return Optional.of(titleMatches.get(0));
+        if (descriptionMatches.size() > 1) {
+            return Optional.of(descriptionMatches.get(0));
         }
 
         if (candidates.size() == 1) {
@@ -206,6 +210,49 @@ public class AssistantIntentResolver {
         }
 
         return Optional.empty();
+    }
+
+    private boolean matchesDescription(String normalizedAsr, ScheduleVO schedule) {
+        String title = normalizeText(schedule.getTitle());
+        String notes = normalizeText(schedule.getNotes());
+
+        if (StringUtils.hasText(title) && normalizedAsr.contains(title)) {
+            return true;
+        }
+        if (StringUtils.hasText(notes) && normalizedAsr.contains(notes)) {
+            return true;
+        }
+
+        String hint = extractScheduleHint(normalizedAsr);
+        if (!StringUtils.hasText(hint) || hint.length() < 2) {
+            return false;
+        }
+
+        if (StringUtils.hasText(title) && (title.contains(hint) || hint.contains(title))) {
+            return true;
+        }
+        if (StringUtils.hasText(notes) && notes.contains(hint)) {
+            return true;
+        }
+
+        for (int len = Math.min(hint.length(), 8); len >= 2; len--) {
+            for (int i = 0; i <= hint.length() - len; i++) {
+                String fragment = hint.substring(i, i + len);
+                if ((StringUtils.hasText(title) && title.contains(fragment))
+                        || (StringUtils.hasText(notes) && notes.contains(fragment))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private String extractScheduleHint(String normalizedAsr) {
+        return SCHEDULE_HINT_NOISE.matcher(normalizedAsr).replaceAll("").trim();
+    }
+
+    private String normalizeText(String text) {
+        return text == null ? "" : text.replace(" ", "");
     }
 
     private ZonedDateTime parseCurrentTime(String currentTimeIso, ZoneId zone) {
