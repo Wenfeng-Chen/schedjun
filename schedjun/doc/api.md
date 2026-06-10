@@ -196,14 +196,24 @@
 
 ### 3.5 删除日程
 
-`DELETE /schedules/{scheduleId}`
+`DELETE /schedules`
+
+单个删除与批量删除共用此接口，传 1 个或多个 ID 即可。
+
+**Body：**
+
+```json
+{
+  "scheduleIds": ["sch_90001", "sch_90002"]
+}
+```
 
 **Response data：**
 
 ```json
 {
-  "deleted": true,
-  "scheduleId": "sch_90001"
+  "deletedCount": 2,
+  "scheduleIds": ["sch_90001", "sch_90002"]
 }
 ```
 
@@ -501,7 +511,7 @@ backend/
 | P0  | `GET /schedules/by-date`            | 首页日历 + 当日列表         |
 | P0  | `POST /schedules`                   | 创建日程页保存             |
 | P0  | `PUT /schedules/{id}`               | 编辑日程页保存（Body 传完整字段） |
-| P0  | `DELETE /schedules/{id}`            | 详情页删除               |
+| P0  | `DELETE /schedules`                 | 详情页 / 多选删除         |
 | P1  | `POST /assistant/voice-to-schedule` | 君听语音主流程             |
 | P1  | `POST /assistant/confirm`           | AI 创建确认             |
 | P2  | `GET /schedules/by-month`           | 日历打点优化              |

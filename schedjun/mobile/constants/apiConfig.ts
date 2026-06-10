@@ -63,6 +63,10 @@ function resolveDevHost(): string {
 
 export const API_BASE_URL = `http://${resolveDevHost()}:8080/api/v1`;
 
+export const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
+
+export const ASSISTANT_ASR_STREAM_URL = `${WS_BASE_URL}/assistant/asr-stream`;
+
 export function getApiConnectionHint(): string {
   if (Device.isDevice && !MANUAL_API_HOST && !getExpoDevHost()) {
     return '请在 constants/apiConfig.ts 中设置 MANUAL_API_HOST 为电脑局域网 IP';

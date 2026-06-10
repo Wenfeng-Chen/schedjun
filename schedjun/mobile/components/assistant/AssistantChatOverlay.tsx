@@ -1,10 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import {
-  AudioModule,
-  setAudioModeAsync,
-  useAudioRecorder,
-  useAudioRecorderState,
-} from 'expo-audio';
+import { AudioModule, setAudioModeAsync } from 'expo-audio';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -27,20 +22,28 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   confirmAssistantApi,
-  voiceToScheduleApi,
+  textToScheduleApi,
   type ScheduleDraft,
 } from '../../api/assistantApi';
 import {
-  assistantRecordingOptions,
   createAssistantGroupId,
+  MIN_HOLD_MS,
 } from '../../constants/assistantRecording';
 import { fonts } from '../../constants/fonts';
 import { colors, radius, spacing } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
+import { openAssistantAsrStream, type AssistantAsrStreamSession } from '../../utils/assistantAsrStream';
+import {
+  isPcmAudioStreamAvailable,
+  startPcmAudioStream,
+  stopPcmAudioStream,
+  subscribePcmChunks,
+} from '../../utils/pcmAudioStreamNative';
 import DefaultAvatar from '../profile/DefaultAvatar';
 import VoiceWaveform from './VoiceWaveform';
 
 type VoiceState = 'idle' | 'listening' | 'processing';
+type ProcessingPhase = 'transcribing' | 'analyzing';
 
 const HINTS = [
   '明天下午三点开会',
@@ -106,15 +109,16 @@ export default function AssistantChatOverlay({
 }: AssistantChatOverlayProps) {
   const insets = useSafeAreaInsets();
   const { accessToken, user } = useAuth();
-  const audioRecorder = useAudioRecorder(assistantRecordingOptions);
-  const recorderState = useAudioRecorderState(audioRecorder);
 
   const groupIdRef = useRef(createAssistantGroupId());
-  const recordingStartedAtRef = useRef<number | null>(null);
+  const holdStartedAtRef = useRef<number | null>(null);
+  const asrSessionRef = useRef<AssistantAsrStreamSession | null>(null);
+  const unsubscribeChunksRef = useRef<(() => void) | null>(null);
+
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [processingPhase, setProcessingPhase] = useState<ProcessingPhase>('transcribing');
   const [hintIndex, setHintIndex] = useState(0);
   const [assistantReply, setAssistantReply] = useState<string | null>(null);
-  const [userText, setUserText] = useState<string | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const [permissionReady, setPermissionReady] = useState(false);
 
@@ -161,7 +165,7 @@ export default function AssistantChatOverlay({
   }, []);
 
   useEffect(() => {
-    if (voiceState === 'listening' || recorderState.isRecording) {
+    if (voiceState === 'listening') {
       micPulse.value = withRepeat(
         withSequence(
           withTiming(1.12, { duration: 700, easing: Easing.inOut(Easing.quad) }),
@@ -173,27 +177,34 @@ export default function AssistantChatOverlay({
       return;
     }
     micPulse.value = withTiming(1, { duration: 200 });
-  }, [voiceState, recorderState.isRecording, micPulse]);
+  }, [voiceState, micPulse]);
 
-  const processRecording = useCallback(
-    async (uri: string) => {
+  const cleanupListening = useCallback(async () => {
+    unsubscribeChunksRef.current?.();
+    unsubscribeChunksRef.current = null;
+    await stopPcmAudioStream();
+    asrSessionRef.current?.close();
+    asrSessionRef.current = null;
+    holdStartedAtRef.current = null;
+  }, []);
+
+  const analyzeAsrText = useCallback(
+    async (asrText: string) => {
       if (!accessToken) {
         Alert.alert('请先登录', '登录后才能使用君听语音助手。');
         setVoiceState('idle');
         return;
       }
 
-      setVoiceState('processing');
-      setPendingConfirm(null);
+      setProcessingPhase('analyzing');
 
       try {
-        const data = await voiceToScheduleApi(accessToken, {
+        const data = await textToScheduleApi(accessToken, {
           groupId: groupIdRef.current,
-          audioUri: uri,
+          text: asrText,
           timezone: user?.timezone,
         });
 
-        setUserText(data.asrText);
         setAssistantReply(data.reply);
 
         if (data.needConfirm && data.scheduleDraft) {
@@ -211,10 +222,9 @@ export default function AssistantChatOverlay({
           onScheduleCreated?.();
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : '语音识别失败';
+        const message = error instanceof Error ? error.message : '理解失败';
         Alert.alert('君听', message);
         setAssistantReply(null);
-        setUserText(null);
       } finally {
         setVoiceState('idle');
       }
@@ -222,50 +232,90 @@ export default function AssistantChatOverlay({
     [accessToken, onScheduleCreated, user?.timezone],
   );
 
-  const startRecording = useCallback(async () => {
+  const startListening = useCallback(async () => {
     if (!permissionReady) {
       Alert.alert('麦克风未就绪', '请稍候或检查麦克风权限。');
       return;
     }
+    if (!isPcmAudioStreamAvailable()) {
+      Alert.alert('设备不支持', '当前设备未启用 PCM 流式录音模块。');
+      return;
+    }
+    if (!accessToken) {
+      Alert.alert('请先登录', '登录后才能使用君听语音助手。');
+      return;
+    }
+    if (voiceState !== 'idle') {
+      return;
+    }
 
     setAssistantReply(null);
-    setUserText(null);
     setPendingConfirm(null);
 
-    await audioRecorder.prepareToRecordAsync();
-    audioRecorder.record();
-    recordingStartedAtRef.current = Date.now();
-    setVoiceState('listening');
-  }, [audioRecorder, permissionReady]);
+    try {
+      const session = await openAssistantAsrStream(accessToken);
+      asrSessionRef.current = session;
+      unsubscribeChunksRef.current = subscribePcmChunks((base64) => {
+        session.sendAudio(base64);
+      });
+      await startPcmAudioStream();
+      holdStartedAtRef.current = Date.now();
+      setVoiceState('listening');
+    } catch (error) {
+      await cleanupListening();
+      const message = error instanceof Error ? error.message : '无法开始录音';
+      Alert.alert('君听', message);
+      setVoiceState('idle');
+    }
+  }, [accessToken, cleanupListening, permissionReady, voiceState]);
 
-  const stopRecording = useCallback(async () => {
-    const startedAt = recordingStartedAtRef.current;
-    if (startedAt != null && Date.now() - startedAt < 1200) {
+  const stopListening = useCallback(async () => {
+    if (voiceState !== 'listening') {
+      return;
+    }
+
+    const startedAt = holdStartedAtRef.current;
+    const session = asrSessionRef.current;
+
+    if (startedAt != null && Date.now() - startedAt < MIN_HOLD_MS) {
+      await cleanupListening();
+      setVoiceState('idle');
       Alert.alert('录音太短', '请按住麦克风至少 1～2 秒，清晰说完再松开。');
       return;
     }
 
-    await audioRecorder.stop();
-    recordingStartedAtRef.current = null;
-    const uri = audioRecorder.uri;
-    if (!uri) {
-      setVoiceState('idle');
-      Alert.alert('录音失败', '未获取到音频文件，请重试。');
-      return;
-    }
-    await processRecording(uri);
-  }, [audioRecorder, processRecording]);
+    setVoiceState('processing');
+    setProcessingPhase('transcribing');
 
-  const toggleListening = useCallback(async () => {
-    if (voiceState === 'processing') {
-      return;
+    try {
+      unsubscribeChunksRef.current?.();
+      unsubscribeChunksRef.current = null;
+      await stopPcmAudioStream();
+
+      if (!session) {
+        throw new Error('语音识别会话不存在');
+      }
+
+      const asrText = await session.finish();
+      session.close();
+      asrSessionRef.current = null;
+      holdStartedAtRef.current = null;
+
+      await analyzeAsrText(asrText);
+    } catch (error) {
+      await cleanupListening();
+      const message = error instanceof Error ? error.message : '语音识别失败';
+      Alert.alert('君听', message);
+      setAssistantReply(null);
+      setVoiceState('idle');
     }
-    if (voiceState === 'listening' || recorderState.isRecording) {
-      await stopRecording();
-      return;
-    }
-    await startRecording();
-  }, [voiceState, recorderState.isRecording, startRecording, stopRecording]);
+  }, [analyzeAsrText, cleanupListening, voiceState]);
+
+  useEffect(() => {
+    return () => {
+      void cleanupListening();
+    };
+  }, [cleanupListening]);
 
   const handleConfirm = useCallback(async () => {
     if (!accessToken || !pendingConfirm) {
@@ -314,23 +364,27 @@ export default function AssistantChatOverlay({
     }
   }, [accessToken, pendingConfirm]);
 
-  const isListening = voiceState === 'listening' || recorderState.isRecording;
+  const isListening = voiceState === 'listening';
   const isProcessing = voiceState === 'processing';
 
   const confirmCopy = pendingConfirm ? getConfirmCopy(pendingConfirm.intent) : null;
 
   const statusText = isProcessing
-    ? '正在思考...'
+    ? processingPhase === 'transcribing'
+      ? '正在识别语音...'
+      : '正在理解安排...'
     : isListening
       ? '我在听，请说...'
       : pendingConfirm && confirmCopy
         ? confirmCopy.status
-        : '点击麦克风，告诉我你的安排';
+        : '按住麦克风，告诉我你的安排';
 
   const actionText = isProcessing
-    ? '请稍候'
+    ? processingPhase === 'transcribing'
+      ? '流式听写收尾中'
+      : 'AI 正在解析意图'
     : isListening
-      ? '再次点击结束'
+      ? '松开结束'
       : pendingConfirm && confirmCopy
         ? confirmCopy.action
         : '支持创建、查询、修改与删除日程';
@@ -378,12 +432,6 @@ export default function AssistantChatOverlay({
                 <Text style={styles.agentRole}>你的日程语音助手</Text>
               </View>
             </View>
-
-            {userText ? (
-              <View style={styles.userBubble}>
-                <Text style={styles.userBubbleText}>{userText}</Text>
-              </View>
-            ) : null}
 
             {assistantReply ? (
               <View style={styles.replyBubble}>
@@ -442,7 +490,7 @@ export default function AssistantChatOverlay({
               )}
             </View>
 
-            {!pendingConfirm && !userText ? (
+            {!pendingConfirm ? (
               <View style={styles.hintBubble}>
                 <Text style={styles.hintLabel}>试试说</Text>
                 <Text style={styles.hintText}>「{HINTS[hintIndex]}」</Text>
@@ -457,7 +505,8 @@ export default function AssistantChatOverlay({
                   isListening && styles.micButtonActive,
                   isProcessing && styles.micButtonDisabled,
                 ]}
-                onPress={toggleListening}
+                onPressIn={startListening}
+                onPressOut={stopListening}
                 disabled={isProcessing}
               >
                 <Ionicons
@@ -543,19 +592,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 13,
     color: colors.textSecondary,
-  },
-  userBubble: {
-    alignSelf: 'stretch',
-    backgroundColor: colors.primaryLight,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  userBubbleText: {
-    fontFamily: fonts.body,
-    fontSize: 14,
-    color: colors.text,
   },
   replyBubble: {
     alignSelf: 'stretch',
@@ -655,7 +691,7 @@ const styles = StyleSheet.create({
   },
   hintLabel: {
     fontFamily: fonts.body,
-    fontSize:  12,
+    fontSize: 12,
     color: colors.textSecondary,
   },
   hintText: {
