@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -24,7 +24,8 @@ import {
 
 interface MyScheduleScreenProps {
   schedules: ScheduleItem[];
-  onSchedulesChange: (schedules: ScheduleItem[]) => void;
+  onDeleteSchedules: (scheduleIds: string[]) => Promise<void>;
+  onDeleteBarVisibleChange?: (visible: boolean) => void;
   onBack?: () => void;
   onAddPress?: () => void;
   onSchedulePress: (scheduleId: string) => void;
@@ -98,7 +99,8 @@ function DayCard({
 
 export default function MyScheduleScreen({
   schedules,
-  onSchedulesChange,
+  onDeleteSchedules,
+  onDeleteBarVisibleChange,
   onBack,
   onAddPress,
   onSchedulePress,
@@ -111,6 +113,7 @@ export default function MyScheduleScreen({
   const [searchText, setSearchText] = useState('');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const filteredSchedules = useMemo(
     () => filterSchedules(schedules, searchText),
@@ -129,6 +132,16 @@ export default function MyScheduleScreen({
   );
   const allSelected =
     allVisibleIds.length > 0 && allVisibleIds.every((id) => selectedIds.has(id));
+
+  const deleteBarVisible = selectionMode && selectedCount > 0;
+
+  useEffect(() => {
+    onDeleteBarVisibleChange?.(deleteBarVisible);
+  }, [deleteBarVisible, onDeleteBarVisibleChange]);
+
+  useEffect(() => {
+    return () => onDeleteBarVisibleChange?.(false);
+  }, [onDeleteBarVisibleChange]);
 
   const exitSelectionMode = () => {
     setSelectionMode(false);
@@ -175,7 +188,7 @@ export default function MyScheduleScreen({
   };
 
   const handleDelete = () => {
-    if (selectedCount === 0) {
+    if (selectedCount === 0 || deleting) {
       return;
     }
 
@@ -185,8 +198,18 @@ export default function MyScheduleScreen({
         text: '删除',
         style: 'destructive',
         onPress: () => {
-          onSchedulesChange(schedules.filter((item) => !selectedIds.has(item.id)));
-          exitSelectionMode();
+          void (async () => {
+            const ids = Array.from(selectedIds);
+            try {
+              setDeleting(true);
+              await onDeleteSchedules(ids);
+              exitSelectionMode();
+            } catch (error) {
+              Alert.alert('删除失败', error instanceof Error ? error.message : '请稍后重试');
+            } finally {
+              setDeleting(false);
+            }
+          })();
         },
       },
     ]);
@@ -282,8 +305,11 @@ export default function MyScheduleScreen({
         onEndReachedThreshold={0.2}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: bottomInset + spacing.xl },
-          selectionMode && selectedCount > 0 && styles.listContentWithFooter,
+          {
+            paddingBottom: deleteBarVisible
+              ? bottomInset + spacing.md
+              : bottomInset + spacing.xl,
+          },
         ]}
         stickySectionHeadersEnabled={false}
         ListFooterComponent={
@@ -317,11 +343,19 @@ export default function MyScheduleScreen({
         }
       />
 
-      {selectionMode && selectedCount > 0 && (
-        <View style={styles.deleteBar}>
-          <Pressable style={styles.deleteButton} onPress={handleDelete}>
-            <Ionicons name="trash-outline" size={22} color={colors.textSecondary} />
-            <Text style={styles.deleteText}>删除</Text>
+      {deleteBarVisible && (
+        <View style={[styles.deleteBar, embedded && { minHeight: bottomInset }]}>
+          <Pressable
+            style={[styles.deleteButton, deleting && styles.deleteButtonDisabled]}
+            onPress={handleDelete}
+            disabled={deleting}
+          >
+            {deleting ? (
+              <ActivityIndicator size="small" color={colors.textSecondary} />
+            ) : (
+              <Ionicons name="trash-outline" size={22} color={colors.textSecondary} />
+            )}
+            <Text style={styles.deleteText}>{deleting ? '删除中...' : '删除'}</Text>
           </Pressable>
         </View>
       )}
@@ -403,10 +437,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
-  },
-  listContentWithFooter: {
-    paddingBottom: 96,
   },
   loadingMore: {
     alignItems: 'center',
@@ -516,12 +546,15 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingBottom: spacing.lg,
-    paddingTop: spacing.md,
+    zIndex: 100,
+    elevation: 12,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
     backgroundColor: colors.backgroundWarm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   deleteButton: {
     alignItems: 'center',
@@ -533,5 +566,8 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     fontSize: 13,
     color: colors.textSecondary,
+  },
+  deleteButtonDisabled: {
+    opacity: 0.6,
   },
 });

@@ -100,10 +100,15 @@ export async function putJsonWithToken<T>(
   });
 }
 
-export async function deleteJsonWithToken<T>(path: string, token: string): Promise<ApiResult<T>> {
+export async function deleteJsonWithToken<T>(
+  path: string,
+  token: string,
+  body?: unknown,
+): Promise<ApiResult<T>> {
   return requestJson<T>(path, {
     method: 'DELETE',
     token,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }
 

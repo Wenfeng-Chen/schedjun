@@ -4,11 +4,13 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class ScheduleDeleteVO {
 
-    private boolean deleted;
-    private String scheduleId;
+    private int deletedCount;
+    private List<String> scheduleIds;
 }
