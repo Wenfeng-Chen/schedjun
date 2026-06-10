@@ -16,12 +16,13 @@ import com.schedjun.backend.common.vo.AssistantConfirmVO;
 import com.schedjun.backend.common.vo.ScheduleVO;
 import com.schedjun.backend.common.vo.VoiceToScheduleVO;
 import com.schedjun.backend.mapper.UserMapper;
-import org.springframework.ai.chat.messages.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -148,7 +149,7 @@ public class AssistantService {
                 schedule = scheduleService.update(toCreateDto(draft));
                 needConfirm = false;
             } else if (DELETE_INTENT.equals(intent) && isDeleteDraftComplete(draft)) {
-                scheduleService.delete(List.of(draft.getScheduleId().trim()));
+                scheduleService.delete(draft.getScheduleId().trim());
                 needConfirm = false;
             }
         }
@@ -201,7 +202,7 @@ public class AssistantService {
             if (!isDeleteDraftComplete(draft)) {
                 throw new IllegalArgumentException("未指定要删除的日程");
             }
-            scheduleService.delete(List.of(draft.getScheduleId().trim()));
+            scheduleService.delete(draft.getScheduleId().trim());
             return new AssistantConfirmVO("日程已删除。", null);
         }
 
