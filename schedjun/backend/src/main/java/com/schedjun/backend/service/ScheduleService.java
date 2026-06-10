@@ -24,7 +24,10 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class ScheduleService {
@@ -110,20 +113,37 @@ public class ScheduleService {
     }
 
     @Transactional
-    public ScheduleDeleteVO delete(String scheduleIdParam) {
+    public ScheduleDeleteVO delete(List<String> scheduleIdParams) {
         Long userId = BaseContext.getCurrentId();
         if (userId == null) {
             throw new IllegalArgumentException("未登录");
         }
+        if (scheduleIdParams == null || scheduleIdParams.isEmpty()) {
+            throw new IllegalArgumentException("scheduleIds 不能为空");
+        }
 
-        Long scheduleId = parseScheduleId(scheduleIdParam);
-        requireOwnedSchedule(userId, scheduleId);
+        Set<Long> uniqueIds = new LinkedHashSet<>();
+        for (String scheduleIdParam : scheduleIdParams) {
+            if (!StringUtils.hasText(scheduleIdParam)) {
+                throw new IllegalArgumentException("scheduleIds 包含空值");
+            }
+            uniqueIds.add(parseScheduleId(scheduleIdParam.trim()));
+        }
+
+        for (Long scheduleId : uniqueIds) {
+            requireOwnedSchedule(userId, scheduleId);
+        }
 
         scheduleMapper.delete(new LambdaQueryWrapper<Schedule>()
-                .eq(Schedule::getId, scheduleId)
-                .eq(Schedule::getUserId, userId));
+                .eq(Schedule::getUserId, userId)
+                .in(Schedule::getId, uniqueIds));
 
-        return new ScheduleDeleteVO(true, formatScheduleId(scheduleId));
+        List<String> deletedIds = new ArrayList<>();
+        for (Long scheduleId : uniqueIds) {
+            deletedIds.add(formatScheduleId(scheduleId));
+        }
+
+        return new ScheduleDeleteVO(deletedIds.size(), deletedIds);
     }
 
     public ScheduleScrollVO scrollList(String startDate, String endDate, String keyword, String cursor, int limit) {
@@ -172,13 +192,13 @@ public class ScheduleService {
 
         LambdaQueryWrapper<Schedule> query = buildListQuery(
                 userId,
-                today.minusDays(7).toString(),
-                today.plusDays(60).toString(),
+                today.minusDays(3).toString(),
+                today.plusDays(7).toString(),
                 null
         );
         query.orderByAsc(Schedule::getStartTime)
                 .orderByAsc(Schedule::getId)
-                .last("LIMIT 30");
+                .last("LIMIT 10");
 
         return scheduleMapper.selectList(query).stream()
                 .map(schedule -> toScheduleVO(schedule, resolveTimezone(user)))

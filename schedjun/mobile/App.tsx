@@ -21,7 +21,7 @@ import MineScreen from './components/profile/MineScreen';
 import MyScheduleScreen from './components/schedule/MyScheduleScreen';
 import ScheduleDetailScreen from './components/schedule/ScheduleDetailScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { createScheduleApi, deleteScheduleApi, listSchedulesApi, updateScheduleApi } from './api/scheduleApi';
+import { createScheduleApi, deleteSchedulesApi, listSchedulesApi, updateScheduleApi } from './api/scheduleApi';
 import { ScheduleItem } from './constants/scheduleTypes';
 import { colors, spacing } from './constants/theme';
 import { scheduleToFormData } from './utils/scheduleDetailUtils';
@@ -47,7 +47,14 @@ function MainApp() {
   const hadExactAlarmRef = useRef(hasExactAlarm);
   const [hasMoreSchedules, setHasMoreSchedules] = useState(false);
   const [loadingMoreSchedules, setLoadingMoreSchedules] = useState(false);
+  const [scheduleDeleteBarVisible, setScheduleDeleteBarVisible] = useState(false);
   const nextScheduleCursorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab !== 'schedules') {
+      setScheduleDeleteBarVisible(false);
+    }
+  }, [activeTab]);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
 
@@ -215,24 +222,38 @@ function MainApp() {
     setOverlayScreen('editEvent');
   }, [selectedScheduleId, activeTab]);
 
+  const handleDeleteSchedules = useCallback(
+    async (scheduleIds: string[]) => {
+      if (scheduleIds.length === 0) {
+        return;
+      }
+
+      if (!isLoggedIn || !accessToken) {
+        Alert.alert('提示', '请先登录后再删除日程');
+        return;
+      }
+
+      await deleteSchedulesApi(accessToken, scheduleIds);
+      const idSet = new Set(scheduleIds);
+      setSchedules((prev) => prev.filter((item) => !idSet.has(item.id)));
+      if (selectedScheduleId && idSet.has(selectedScheduleId)) {
+        setSelectedScheduleId(null);
+      }
+    },
+    [selectedScheduleId, accessToken, isLoggedIn],
+  );
+
   const handleDeleteSchedule = useCallback(async () => {
     if (!selectedScheduleId) {
       return;
     }
 
-    if (!isLoggedIn || !accessToken) {
-      Alert.alert('提示', '请先登录后再删除日程');
-      return;
-    }
-
     try {
-      await deleteScheduleApi(accessToken, selectedScheduleId);
-      setSchedules((prev) => prev.filter((item) => item.id !== selectedScheduleId));
-      setSelectedScheduleId(null);
+      await handleDeleteSchedules([selectedScheduleId]);
     } catch (error) {
       Alert.alert('提示', error instanceof Error ? error.message : '删除失败');
     }
-  }, [selectedScheduleId, accessToken, isLoggedIn]);
+  }, [selectedScheduleId, handleDeleteSchedules]);
 
   const handleSaveEdit = useCallback(
     async (data: EditEventFormData) => {
@@ -321,7 +342,8 @@ function MainApp() {
             <MyScheduleScreen
               embedded
               schedules={schedules}
-              onSchedulesChange={setSchedules}
+              onDeleteSchedules={handleDeleteSchedules}
+              onDeleteBarVisibleChange={setScheduleDeleteBarVisible}
               onAddPress={handleScheduleAddPress}
               onSchedulePress={openScheduleDetail}
               onLoadMore={loadMoreSchedules}
@@ -335,9 +357,11 @@ function MainApp() {
             <MineScreen scheduleCount={schedules.length} bottomInset={tabBarInset} />
           )}
 
-          <View style={styles.tabBarWrap}>
-            <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} />
-          </View>
+          {!(activeTab === 'schedules' && scheduleDeleteBarVisible) && (
+            <View style={styles.tabBarWrap}>
+              <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+            </View>
+          )}
         </View>
 
         {selectedSchedule && (

@@ -46,17 +46,18 @@ export async function updateScheduleApi(
 }
 
 export interface ScheduleDeleteData {
-  deleted: boolean;
-  scheduleId: string;
+  deletedCount: number;
+  scheduleIds: string[];
 }
 
-export async function deleteScheduleApi(
+export async function deleteSchedulesApi(
   accessToken: string,
-  scheduleId: string,
+  scheduleIds: string[],
 ): Promise<ScheduleDeleteData> {
   const result = await deleteJsonWithToken<ScheduleDeleteData>(
-    `/schedules/${encodeURIComponent(scheduleId)}`,
+    '/schedules',
     accessToken,
+    { scheduleIds },
   );
   return unwrapResult(result);
 }
