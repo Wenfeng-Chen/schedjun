@@ -14,6 +14,7 @@ import com.schedjun.backend.common.vo.ScheduleScrollVO;
 import com.schedjun.backend.common.vo.ScheduleVO;
 import com.schedjun.backend.mapper.ScheduleMapper;
 import com.schedjun.backend.mapper.UserMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.Set;
 
 @Service
+@Slf4j
 public class ScheduleService {
 
     private static final String DEFAULT_TIMEZONE = "Asia/Shanghai";
@@ -270,6 +272,9 @@ public class ScheduleService {
 
         String trimmed = scheduleId.trim();
         if (!trimmed.startsWith("sch_")) {
+            if (trimmed.chars().allMatch(Character::isDigit)) {
+                return Long.parseLong(trimmed);
+            }
             throw new IllegalArgumentException("日程 ID 格式无效");
         }
 
@@ -363,10 +368,31 @@ public class ScheduleService {
     }
 
     private <T> T fromJson(String json, Class<T> type) {
-        try {
-            return objectMapper.readValue(json, type);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("日程规则解析失败");
+        if (!StringUtils.hasText(json)) {
+            return defaultRule(type);
         }
+        try {
+            T parsed = objectMapper.readValue(json, type);
+            return parsed != null ? parsed : defaultRule(type);
+        } catch (JsonProcessingException ex) {
+            log.warn("日程规则 JSON 解析失败，使用默认值: {}", json, ex);
+            return defaultRule(type);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T defaultRule(Class<T> type) {
+        if (type == RepeatRule.class) {
+            RepeatRule repeat = new RepeatRule();
+            repeat.setPreset("never");
+            return (T) repeat;
+        }
+        if (type == ReminderRule.class) {
+            ReminderRule reminder = new ReminderRule();
+            reminder.setEnabled(true);
+            reminder.setPreset("atStart");
+            return (T) reminder;
+        }
+        throw new IllegalArgumentException("不支持的规则类型");
     }
 }

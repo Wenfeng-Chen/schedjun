@@ -1,14 +1,12 @@
 package com.schedjun.backend.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schedjun.backend.common.context.BaseContext;
 import com.schedjun.backend.common.dto.AssistantConfirmDTO;
 import com.schedjun.backend.common.dto.CreateScheduleDTO;
 import com.schedjun.backend.common.dto.TextToScheduleDTO;
 import com.schedjun.backend.common.entity.AssistantMessage;
 import com.schedjun.backend.common.entity.User;
-import com.schedjun.backend.common.model.AssistantAiResult;
+import com.schedjun.backend.common.model.AssistantToolResult;
 import com.schedjun.backend.common.model.ReminderRule;
 import com.schedjun.backend.common.model.RepeatRule;
 import com.schedjun.backend.common.model.ScheduleDraft;
@@ -26,9 +24,7 @@ import org.springframework.util.StringUtils;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @Slf4j
@@ -56,12 +52,6 @@ public class AssistantService {
     @Autowired
     private AssistantScheduleDraftService assistantScheduleDraftService;
 
-    @Autowired
-    private AssistantIntentResolver assistantIntentResolver;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
     @Transactional
     public VoiceToScheduleVO textToSchedule(TextToScheduleDTO dto) {
         Long userId = requireUserId();
@@ -79,88 +69,36 @@ public class AssistantService {
                 ? dto.getCurrentTime().trim()
                 : ZonedDateTime.now(ZoneId.of(resolvedTimezone)).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 
-        return analyzeAndBuildResponse(
-                userId,
-                groupId,
-                asrText,
-                resolvedTimezone,
-                resolvedCurrentTime,
-                dto.isAutoConfirm()
-        );
-    }
-
-    private VoiceToScheduleVO analyzeAndBuildResponse(
-            Long userId,
-            String groupId,
-            String asrText,
-            String resolvedTimezone,
-            String resolvedCurrentTime,
-            boolean autoConfirm
-    ) {
         List<Message> history = assistantMessageService.buildChatHistory(userId, groupId);
-        List<ScheduleVO> existingSchedules = scheduleService.listForAssistantContext(userId);
-        String existingSchedulesJson = buildSchedulesContext(existingSchedules);
-        AssistantAiResult aiResult = assistantChatService.analyze(
+
+        AssistantToolResult toolResult = assistantChatService.analyze(
                 asrText,
                 history,
                 resolvedTimezone,
-                resolvedCurrentTime,
-                existingSchedulesJson
-        );
-
-        aiResult = assistantIntentResolver.refine(
-                asrText,
-                aiResult,
-                existingSchedules,
-                resolvedTimezone,
                 resolvedCurrentTime
         );
-
-        String intent = aiResult.getIntent();
-        if (aiResult.getScheduleDraft() != null
-                && (CREATE_INTENT.equals(intent) || UPDATE_INTENT.equals(intent))) {
-            assistantScheduleDraftService.alignDraftWithAsr(
-                    aiResult.getScheduleDraft(),
-                    asrText,
-                    resolvedTimezone,
-                    resolvedCurrentTime
-            );
-        }
 
         assistantMessageService.saveUserMessage(userId, groupId, asrText);
         String messageId = assistantMessageService.saveAssistantMessage(
                 userId,
                 groupId,
-                aiResult.getReply(),
-                intent,
-                aiResult.getScheduleDraft()
+                toolResult.getReply(),
+                toolResult.getIntent(),
+                toolResult.getScheduleDraft()
         );
 
-        boolean needConfirm = Boolean.TRUE.equals(aiResult.getNeedConfirm());
-        ScheduleVO schedule = null;
+        boolean needConfirm = CREATE_INTENT.equals(toolResult.getIntent()) && toolResult.isToolCalled();
 
-        if (autoConfirm && aiResult.getScheduleDraft() != null) {
-            ScheduleDraft draft = aiResult.getScheduleDraft();
-            assistantScheduleDraftService.normalizeDraftZone(draft, resolvedTimezone);
-            if (CREATE_INTENT.equals(intent) && isCreateDraftComplete(draft)) {
-                schedule = scheduleService.createFromVoice(toCreateDto(draft));
-                needConfirm = false;
-            } else if (UPDATE_INTENT.equals(intent) && isUpdateDraftComplete(draft)) {
-                schedule = scheduleService.update(toCreateDto(draft));
-                needConfirm = false;
-            } else if (DELETE_INTENT.equals(intent) && isDeleteDraftComplete(draft)) {
-                scheduleService.delete(draft.getScheduleId().trim());
-                needConfirm = false;
-            }
-        }
+        log.info("textToSchedule 完成: intent={}, toolCalled={}, needConfirm={}, messageId={}",
+                toolResult.getIntent(), toolResult.isToolCalled(), needConfirm, messageId);
 
         return new VoiceToScheduleVO(
                 groupId,
                 asrText,
-                aiResult.getReply(),
-                intent,
-                aiResult.getScheduleDraft(),
-                schedule,
+                toolResult.getReply(),
+                toolResult.getIntent(),
+                toolResult.getScheduleDraft(),
+                null,
                 needConfirm,
                 messageId
         );
@@ -202,7 +140,7 @@ public class AssistantService {
             if (!isDeleteDraftComplete(draft)) {
                 throw new IllegalArgumentException("未指定要删除的日程");
             }
-            scheduleService.delete(draft.getScheduleId().trim());
+            scheduleService.delete(List.of(draft.getScheduleId().trim()));
             return new AssistantConfirmVO("日程已删除。", null);
         }
 
@@ -211,24 +149,6 @@ public class AssistantService {
         }
         ScheduleVO schedule = scheduleService.createFromVoice(toCreateDto(draft));
         return new AssistantConfirmVO("日程已创建。", schedule);
-    }
-
-    private String buildSchedulesContext(List<ScheduleVO> schedules) {
-        try {
-            List<Map<String, String>> compact = schedules.stream()
-                    .map(schedule -> {
-                        Map<String, String> item = new LinkedHashMap<>();
-                        item.put("id", schedule.getId());
-                        item.put("title", schedule.getTitle());
-                        item.put("startTime", schedule.getStartTime());
-                        item.put("endTime", schedule.getEndTime());
-                        return item;
-                    })
-                    .toList();
-            return objectMapper.writeValueAsString(compact);
-        } catch (JsonProcessingException ex) {
-            return "[]";
-        }
     }
 
     private void validateConfirmRequest(AssistantConfirmDTO dto) {

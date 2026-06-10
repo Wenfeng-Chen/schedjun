@@ -76,6 +76,54 @@ class AssistantIntentResolverTest {
     }
 
     @Test
+    void matchesDeleteIntentForTodayBarScheduleByTitle() {
+        AssistantAiResult aiResult = createAiResult("create_schedule", buildDraft("去酒吧"));
+        List<ScheduleVO> schedules = List.of(existingSchedule(
+                "sch_9",
+                "去酒吧",
+                "2026-05-29T20:00:00+08:00",
+                "2026-05-29T23:00:00+08:00",
+                ""
+        ));
+
+        AssistantAiResult refined = resolver.refine(
+                "删除今天去酒吧的日程",
+                aiResult,
+                schedules,
+                "Asia/Shanghai",
+                "2026-05-29T10:00:00+08:00"
+        );
+
+        assertEquals("delete_schedule", refined.getIntent());
+        assertTrue(refined.getNeedConfirm());
+        assertEquals("sch_9", refined.getScheduleDraft().getScheduleId());
+        assertEquals("好的，确认删除「去酒吧」吗？", refined.getReply());
+    }
+
+    @Test
+    void matchesDeleteIntentWhenBarKeywordIsInNotes() {
+        AssistantAiResult aiResult = createAiResult("create_schedule", buildDraft("看球赛"));
+        List<ScheduleVO> schedules = List.of(existingSchedule(
+                "sch_10",
+                "和朋友看球赛直播",
+                "2026-05-29T22:00:00+08:00",
+                "2026-05-30T00:30:00+08:00",
+                "酒吧包间已订，别开车。"
+        ));
+
+        AssistantAiResult refined = resolver.refine(
+                "删除今天去酒吧的日程",
+                aiResult,
+                schedules,
+                "Asia/Shanghai",
+                "2026-05-29T10:00:00+08:00"
+        );
+
+        assertEquals("delete_schedule", refined.getIntent());
+        assertEquals("sch_10", refined.getScheduleDraft().getScheduleId());
+    }
+
+    @Test
     void clarifiesWhenDeleteWithoutMatchingSchedule() {
         AssistantAiResult aiResult = createAiResult("create_schedule", buildDraft("开会"));
 
@@ -110,11 +158,28 @@ class AssistantIntentResolverTest {
     }
 
     private ScheduleVO existingSchedule(String id, String title) {
+        return existingSchedule(
+                id,
+                title,
+                "2026-05-31T15:00:00+08:00",
+                "2026-05-31T16:00:00+08:00",
+                ""
+        );
+    }
+
+    private ScheduleVO existingSchedule(
+            String id,
+            String title,
+            String startTime,
+            String endTime,
+            String notes
+    ) {
         ScheduleVO schedule = new ScheduleVO();
         schedule.setId(id);
         schedule.setTitle(title);
-        schedule.setStartTime("2026-05-31T15:00:00+08:00");
-        schedule.setEndTime("2026-05-31T16:00:00+08:00");
+        schedule.setStartTime(startTime);
+        schedule.setEndTime(endTime);
+        schedule.setNotes(notes);
         return schedule;
     }
 }
