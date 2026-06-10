@@ -6,10 +6,10 @@ import lombok.Data;
 @Data
 public class TextToScheduleDTO {
 
-    @NotBlank
+    @NotBlank(message = "groupId 不能为空")
     private String groupId;
 
-    @NotBlank
+    @NotBlank(message = "text 不能为空")
     private String text;
 
     private String timezone;

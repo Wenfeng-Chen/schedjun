@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.schedjun.backend.common.context.BaseContext;
 import com.schedjun.backend.common.dto.AssistantConfirmDTO;
 import com.schedjun.backend.common.dto.CreateScheduleDTO;
+import com.schedjun.backend.common.dto.TextToScheduleDTO;
 import com.schedjun.backend.common.entity.AssistantMessage;
 import com.schedjun.backend.common.entity.User;
 import com.schedjun.backend.common.model.AssistantAiResult;
@@ -15,19 +16,19 @@ import com.schedjun.backend.common.vo.AssistantConfirmVO;
 import com.schedjun.backend.common.vo.ScheduleVO;
 import com.schedjun.backend.common.vo.VoiceToScheduleVO;
 import com.schedjun.backend.mapper.UserMapper;
-import org.springframework.ai.chat.messages.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -39,9 +40,6 @@ public class AssistantService {
     private static final String DELETE_INTENT = "delete_schedule";
     private static final String ACTION_CONFIRM = "confirm";
     private static final String ACTION_CANCEL = "cancel";
-
-    @Autowired
-    private AsrService asrService;
 
     @Autowired
     private AssistantChatService assistantChatService;
@@ -65,28 +63,40 @@ public class AssistantService {
     private ObjectMapper objectMapper;
 
     @Transactional
-    public VoiceToScheduleVO voiceToSchedule(
-            String groupId,
-            MultipartFile audio,
-            String format,
-            int sampleRate,
-            String language,
-            boolean autoConfirm,
-            String timezone,
-            String currentTime
-    ) throws IOException {
+    public VoiceToScheduleVO textToSchedule(TextToScheduleDTO dto) {
         Long userId = requireUserId();
-        validateVoiceRequest(groupId, audio, format, sampleRate);
+        if (!StringUtils.hasText(dto.getGroupId())) {
+            throw new IllegalArgumentException("groupId 不能为空");
+        }
+        if (!StringUtils.hasText(dto.getText())) {
+            throw new IllegalArgumentException("text 不能为空");
+        }
 
-        String resolvedTimezone = resolveUserTimezone(userId, timezone);
-        String resolvedCurrentTime = StringUtils.hasText(currentTime)
-                ? currentTime.trim()
+        String groupId = dto.getGroupId().trim();
+        String asrText = dto.getText().trim();
+        String resolvedTimezone = resolveUserTimezone(userId, dto.getTimezone());
+        String resolvedCurrentTime = StringUtils.hasText(dto.getCurrentTime())
+                ? dto.getCurrentTime().trim()
                 : ZonedDateTime.now(ZoneId.of(resolvedTimezone)).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-        String resolvedLanguage = StringUtils.hasText(language) ? language.trim() : null;
 
-        byte[] audioBytes = audio.getBytes();
-        String asrText = asrService.transcribe(audioBytes, format, sampleRate, resolvedLanguage);
+        return analyzeAndBuildResponse(
+                userId,
+                groupId,
+                asrText,
+                resolvedTimezone,
+                resolvedCurrentTime,
+                dto.isAutoConfirm()
+        );
+    }
 
+    private VoiceToScheduleVO analyzeAndBuildResponse(
+            Long userId,
+            String groupId,
+            String asrText,
+            String resolvedTimezone,
+            String resolvedCurrentTime,
+            boolean autoConfirm
+    ) {
         List<Message> history = assistantMessageService.buildChatHistory(userId, groupId);
         List<ScheduleVO> existingSchedules = scheduleService.listForAssistantContext(userId);
         String existingSchedulesJson = buildSchedulesContext(existingSchedules);
@@ -205,7 +215,17 @@ public class AssistantService {
 
     private String buildSchedulesContext(List<ScheduleVO> schedules) {
         try {
-            return objectMapper.writeValueAsString(schedules);
+            List<Map<String, String>> compact = schedules.stream()
+                    .map(schedule -> {
+                        Map<String, String> item = new LinkedHashMap<>();
+                        item.put("id", schedule.getId());
+                        item.put("title", schedule.getTitle());
+                        item.put("startTime", schedule.getStartTime());
+                        item.put("endTime", schedule.getEndTime());
+                        return item;
+                    })
+                    .toList();
+            return objectMapper.writeValueAsString(compact);
         } catch (JsonProcessingException ex) {
             return "[]";
         }
@@ -237,21 +257,6 @@ public class AssistantService {
             return requestedTimezone.trim();
         }
         return DEFAULT_TIMEZONE;
-    }
-
-    private void validateVoiceRequest(String groupId, MultipartFile audio, String format, int sampleRate) {
-        if (!StringUtils.hasText(groupId)) {
-            throw new IllegalArgumentException("groupId 不能为空");
-        }
-        if (audio == null || audio.isEmpty()) {
-            throw new IllegalArgumentException("音频不能为空");
-        }
-        if (!StringUtils.hasText(format)) {
-            throw new IllegalArgumentException("format 不能为空");
-        }
-        if (sampleRate <= 0) {
-            throw new IllegalArgumentException("sampleRate 无效");
-        }
     }
 
     private Long requireUserId() {

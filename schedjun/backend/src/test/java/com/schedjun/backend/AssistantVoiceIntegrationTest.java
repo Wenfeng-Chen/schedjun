@@ -7,7 +7,6 @@ import com.schedjun.backend.common.model.AssistantAiResult;
 import com.schedjun.backend.common.model.ReminderRule;
 import com.schedjun.backend.common.model.RepeatRule;
 import com.schedjun.backend.common.model.ScheduleDraft;
-import com.schedjun.backend.service.AsrService;
 import com.schedjun.backend.service.AssistantChatService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +16,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -30,7 +28,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -45,9 +42,6 @@ class AssistantVoiceIntegrationTest {
     private ObjectMapper objectMapper;
 
     @MockitoBean
-    private AsrService asrService;
-
-    @MockitoBean
     private AssistantChatService assistantChatService;
 
     @AfterEach
@@ -56,11 +50,8 @@ class AssistantVoiceIntegrationTest {
     }
 
     @Test
-    void voiceToScheduleReturnsSuccess() throws Exception {
+    void textToScheduleReturnsSuccess() throws Exception {
         String token = loginAndGetToken();
-
-        when(asrService.transcribe(any(), anyString(), org.mockito.ArgumentMatchers.anyInt(), any()))
-                .thenReturn("明天下午三点开会");
 
         AssistantAiResult aiResult = new AssistantAiResult();
         aiResult.setReply("好的，已为你创建「开会」，明天 15:00。");
@@ -85,19 +76,20 @@ class AssistantVoiceIntegrationTest {
         when(assistantChatService.analyze(anyString(), anyList(), anyString(), anyString(), anyString()))
                 .thenReturn(aiResult);
 
-        MockMultipartFile audio = new MockMultipartFile(
-                "audio",
-                "voice.wav",
-                "audio/wav",
-                new byte[1280]
-        );
+        String body = """
+                {
+                  "groupId": "grp_test_001",
+                  "text": "明天下午三点开会",
+                  "timezone": "Asia/Shanghai",
+                  "currentTime": "2026-06-01T10:00:00+08:00",
+                  "autoConfirm": false
+                }
+                """;
 
         MvcResult result = mockMvc.perform(
-                        multipart("/assistant/voice-to-schedule")
-                                .file(audio)
-                                .param("groupId", "grp_test_001")
-                                .param("format", "wav")
-                                .param("sampleRate", "16000")
+                        post("/assistant/text-to-schedule")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
                                 .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andReturn();

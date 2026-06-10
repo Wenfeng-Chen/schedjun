@@ -19,6 +19,7 @@ spring:
         options:
           model: deepseek-chat
           temperature: 0.2
+          max-tokens: 512
 
 mybatis-plus:
   configuration:
