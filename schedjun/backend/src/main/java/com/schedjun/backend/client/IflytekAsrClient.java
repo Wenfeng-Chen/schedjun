@@ -21,7 +21,9 @@ import java.time.Duration;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -34,6 +36,8 @@ public class IflytekAsrClient {
     /** 16kHz 16bit mono: 1280 bytes ≈ 40ms */
     private static final int FRAME_SIZE = 1280;
     private static final int FRAME_INTERVAL_MS = 40;
+    /** 静音多久后判停；设大一些，避免用户句中停顿被切成多段 */
+    private static final int VAD_EOS_MS = 10000;
     private static final DateTimeFormatter IFLYTEK_DATE = DateTimeFormatter
     .ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US)
     .withZone(ZoneOffset.UTC);
@@ -83,7 +87,7 @@ public class IflytekAsrClient {
 
     private String doTranscribe(byte[] pcm, int sampleRate, String language) throws Exception {
         String authUrl = buildAuthUrl();
-        StringBuilder transcript = new StringBuilder();
+        TranscriptAccumulator transcript = new TranscriptAccumulator();
         CompletableFuture<Void> finished = new CompletableFuture<>();
 
         WebSocket.Listener listener = new WebSocket.Listener() {
@@ -139,7 +143,7 @@ public class IflytekAsrClient {
                 .join();
 
         finished.get(60, TimeUnit.SECONDS);
-        String text = transcript.toString().trim();
+        String text = transcript.toText().trim();
         log.info("讯飞 ASR 结果: {}", text.isEmpty() ? "(空)" : text);
         if (!StringUtils.hasText(text)) {
             throw new IllegalArgumentException("未识别到有效语音内容，请靠近麦克风清晰说话");
@@ -155,7 +159,7 @@ public class IflytekAsrClient {
                     "language": "%s",
                     "domain": "iat",
                     "accent": "mandarin",
-                    "vad_eos": 3000,
+                    "vad_eos": %d,
                     "dwa": "wpgs"
                   },
                   "data": {
@@ -165,7 +169,7 @@ public class IflytekAsrClient {
                     "audio": ""
                   }
                 }
-                """.formatted(properties.getAppId(), language, sampleRate);
+                """.formatted(properties.getAppId(), language, VAD_EOS_MS, sampleRate);
         webSocket.sendText(payload, true);
     }
 
@@ -211,7 +215,7 @@ public class IflytekAsrClient {
         webSocket.sendText(payload, true);
     }
 
-    private void handleResponse(String payload, StringBuilder transcript, CompletableFuture<Void> finished) {
+    private void handleResponse(String payload, TranscriptAccumulator transcript, CompletableFuture<Void> finished) {
         try {
             JsonNode root = objectMapper.readTree(payload);
             int code = root.path("code").asInt(-1);
@@ -222,18 +226,7 @@ public class IflytekAsrClient {
             }
 
             JsonNode result = root.path("data").path("result");
-            JsonNode ws = result.path("ws");
-            if (ws.isArray()) {
-                String piece = extractWords(ws);
-                String pgs = result.path("pgs").asText("");
-                if ("rpl".equals(pgs)) {
-                    // 替换模式：清空后写入最新片段（简化处理）
-                    transcript.setLength(0);
-                    transcript.append(piece);
-                } else {
-                    transcript.append(piece);
-                }
-            }
+            transcript.appendResult(result);
 
             if (root.path("data").path("status").asInt() == 2) {
                 finished.complete(null);
@@ -243,14 +236,74 @@ public class IflytekAsrClient {
         }
     }
 
-    private String extractWords(JsonNode ws) {
-        StringBuilder piece = new StringBuilder();
-        for (JsonNode wordSlot : ws) {
-            for (JsonNode cw : wordSlot.path("cw")) {
-                piece.append(cw.path("w").asText(""));
+    /**
+     * 讯飞 wpgs 动态修正：按官方 demo 用分段列表拼接。
+     * apd 追加一片结果；rpl 按 rg 区间作废旧片段后再追加新片段。
+     */
+    private static final class TranscriptAccumulator {
+        private final List<Segment> segments = new ArrayList<>();
+        private final StringBuilder fallback = new StringBuilder();
+
+        void appendResult(JsonNode result) {
+            String piece = extractPiece(result.path("ws"));
+            if (!StringUtils.hasText(piece)) {
+                return;
+            }
+
+            if (!result.has("pgs")) {
+                fallback.append(piece);
+                return;
+            }
+
+            String pgs = result.path("pgs").asText("");
+            if ("rpl".equals(pgs)) {
+                JsonNode rg = result.path("rg");
+                if (rg.isArray() && rg.size() == 2) {
+                    int start = rg.get(0).asInt() - 1;
+                    int end = rg.get(1).asInt() - 1;
+                    for (int i = start; i <= end && i < segments.size(); i++) {
+                        segments.get(i).deleted = true;
+                    }
+                }
+            }
+
+            segments.add(new Segment(piece));
+        }
+
+        String toText() {
+            if (segments.isEmpty()) {
+                return fallback.toString();
+            }
+            StringBuilder text = new StringBuilder();
+            for (Segment segment : segments) {
+                if (!segment.deleted) {
+                    text.append(segment.text);
+                }
+            }
+            return text.toString();
+        }
+
+        private String extractPiece(JsonNode ws) {
+            if (!ws.isArray()) {
+                return "";
+            }
+            StringBuilder piece = new StringBuilder();
+            for (JsonNode wordSlot : ws) {
+                for (JsonNode cw : wordSlot.path("cw")) {
+                    piece.append(cw.path("w").asText(""));
+                }
+            }
+            return piece.toString();
+        }
+
+        private static final class Segment {
+            private final String text;
+            private boolean deleted;
+
+            private Segment(String text) {
+                this.text = text;
             }
         }
-        return piece.toString();
     }
 
     private PcmChunk extractPcm(byte[] audioBytes, String format, int fallbackSampleRate) {
