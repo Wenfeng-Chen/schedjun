@@ -7,7 +7,7 @@ import { Platform } from 'react-native';
  * 留空则优先从 Expo 调试地址自动解析
  */
 // 填电脑在 WiFi/局域网上的 IPv4（ipconfig 里非 172.x 虚拟网卡那条），手机才能连上
-const MANUAL_API_HOST = '10.15.7.65';
+const MANUAL_API_HOST = '10.15.51.98';
 
 function parseHostFromDebugger(value: string | undefined | null): string | null {
   if (!value) {
