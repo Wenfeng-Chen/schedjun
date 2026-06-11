@@ -50,7 +50,8 @@ public class AssistantChatService {
 
             CreateScheduleToolRequest pendingRequest = ScheduleTools.consumePendingRequest();
             List<PendingDelete> pendingDeletes = ScheduleTools.consumePendingDeletions();
-            boolean toolCalled = pendingRequest != null || !pendingDeletes.isEmpty();
+            Integer updateCount = ScheduleTools.consumeUpdateCount();
+            boolean toolCalled = pendingRequest != null || !pendingDeletes.isEmpty() || updateCount != null;
 
             String intent;
             ScheduleDraft draft = null;
@@ -71,6 +72,11 @@ public class AssistantChatService {
             } else if (pendingRequest != null) {
                 intent = "create_schedule";
                 draft = buildDraft(pendingRequest);
+            } else if (updateCount != null) {
+                intent = "update_schedule";
+                if (updateCount > 0) {
+                    draft = new ScheduleDraft();
+                }
             } else {
                 intent = "chitchat";
                 if (StringUtils.hasText(reply) && isClarify(reply)) {
