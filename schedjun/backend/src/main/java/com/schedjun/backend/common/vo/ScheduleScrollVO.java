@@ -14,4 +14,5 @@ public class ScheduleScrollVO {
     private List<ScheduleVO> records;
     private boolean hasMore;
     private String nextCursor;
+    private long total;
 }

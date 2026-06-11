@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Modal,
   PanResponder,
   StyleSheet,
@@ -26,10 +27,11 @@ const LONG_PRESS_MS = 320;
 const EDGE_MARGIN = 12;
 
 interface FloatingAssistantProps {
+  isLoggedIn?: boolean;
   onScheduleCreated?: () => void;
 }
 
-export default function FloatingAssistant({ onScheduleCreated }: FloatingAssistantProps) {
+export default function FloatingAssistant({ isLoggedIn, onScheduleCreated }: FloatingAssistantProps) {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
@@ -100,8 +102,12 @@ export default function FloatingAssistant({ onScheduleCreated }: FloatingAssista
   }, [clampPosition, translateX, translateY]);
 
   const handleTap = useCallback(() => {
+    if (!isLoggedIn) {
+      Alert.alert('请先登录', '登录后即可与君听对话，管理你的日程。');
+      return;
+    }
     setChatOpen(true);
-  }, []);
+  }, [isLoggedIn]);
 
   const clearLongPressTimer = useCallback(() => {
     if (longPressTimer.current) {

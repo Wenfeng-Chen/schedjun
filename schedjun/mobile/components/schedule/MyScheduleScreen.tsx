@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  RefreshControl,
   SectionList,
   StyleSheet,
   Text,
@@ -34,6 +35,8 @@ interface MyScheduleScreenProps {
   loadingMore?: boolean;
   embedded?: boolean;
   bottomInset?: number;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 function SelectionCheckbox({ selected }: { selected: boolean }) {
@@ -109,6 +112,8 @@ export default function MyScheduleScreen({
   loadingMore = false,
   embedded = false,
   bottomInset = 0,
+  refreshing = false,
+  onRefresh,
 }: MyScheduleScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [selectionMode, setSelectionMode] = useState(false);
@@ -297,6 +302,16 @@ export default function MyScheduleScreen({
         sections={sections}
         keyExtractor={(item) => item.key}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          ) : undefined
+        }
         onEndReached={() => {
           if (hasMore && !loadingMore) {
             onLoadMore?.();

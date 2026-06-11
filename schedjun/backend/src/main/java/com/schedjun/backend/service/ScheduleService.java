@@ -164,6 +164,10 @@ public class ScheduleService {
 
         LambdaQueryWrapper<Schedule> listQuery = buildListQuery(userId, startDate, endDate, keyword);
         applyCursorFilter(listQuery, cursor);
+
+        long total = scheduleMapper.selectCount(
+                new LambdaQueryWrapper<Schedule>().eq(Schedule::getUserId, userId)
+        );
         listQuery.orderByAsc(Schedule::getStartTime)
                 .orderByAsc(Schedule::getId)
                 .last(String.format("LIMIT %d", safeLimit + 1));
@@ -180,7 +184,12 @@ public class ScheduleService {
                 ? encodeCursor(pageItems.get(pageItems.size() - 1))
                 : null;
 
-        return new ScheduleScrollVO(records, hasMore, nextCursor);
+        ScheduleScrollVO result = new ScheduleScrollVO();
+        result.setRecords(records);
+        result.setHasMore(hasMore);
+        result.setNextCursor(nextCursor);
+        result.setTotal(total);
+        return result;
     }
 
     public List<ScheduleVO> listForAssistantContext(Long userId) {
