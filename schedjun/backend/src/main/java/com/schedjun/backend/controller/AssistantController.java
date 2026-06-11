@@ -50,7 +50,7 @@ public class AssistantController {
 
     public Result<VoiceToScheduleVO> textToSchedule(@Valid @RequestBody TextToScheduleDTO dto) {
 
-        log.info("文本理解: groupId={}, textLength={}", dto.getGroupId(), dto.getText().length());
+        log.info("文本理解: groupId={}, text={}", dto.getGroupId(), dto.getText());
 
         return Result.success(assistantService.textToSchedule(dto));
 
