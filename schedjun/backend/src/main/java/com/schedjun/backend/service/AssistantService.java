@@ -51,9 +51,6 @@ public class AssistantService {
     @Autowired
     private UserMapper userMapper;
 
-    @Autowired
-    private AssistantScheduleDraftService assistantScheduleDraftService;
-
     @Transactional
     public VoiceToScheduleVO textToSchedule(TextToScheduleDTO dto) {
         Long userId = requireUserId();
@@ -127,7 +124,7 @@ public class AssistantService {
         User user = userMapper.selectById(userId);
         String timezone = resolveUserTimezone(userId, user != null ? user.getTimezone() : null);
         if (draft != null) {
-            assistantScheduleDraftService.normalizeDraftZone(draft, timezone);
+            normalizeDraftZone(draft, timezone);
         }
 
         if (UPDATE_INTENT.equals(intent)) {
@@ -236,4 +233,21 @@ public class AssistantService {
         dto.setReminder(reminder);
         return dto;
     }
+
+    public void normalizeDraftZone(ScheduleDraft draft, String timezone) {
+        if (draft == null) {
+            return;
+        }
+        ZoneId zone = ZoneId.of(timezone);
+        
+        if (draft.getStartTime() != null) {
+            ZonedDateTime start = draft.getStartTime().atZoneSameInstant(zone);
+            draft.setStartTime(start.toOffsetDateTime());
+        }
+        if (draft.getEndTime() != null) {
+            ZonedDateTime end = draft.getEndTime().atZoneSameInstant(zone);
+            draft.setEndTime(end.toOffsetDateTime());
+        }
+    }
+
 }

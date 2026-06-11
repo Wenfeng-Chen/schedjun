@@ -10,6 +10,7 @@ export interface ScheduleScrollData {
   records: ScheduleResponseData[];
   hasMore: boolean;
   nextCursor: string | null;
+  total: number;
 }
 
 export interface ScheduleListParams {

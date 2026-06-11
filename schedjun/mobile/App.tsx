@@ -9,7 +9,7 @@ import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { useScheduleExactAlarmPermission } from 'expo-exact-alarms-permission';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import FloatingAssistant from './components/assistant/FloatingAssistant';
@@ -49,7 +49,10 @@ function MainApp() {
   const [hasMoreSchedules, setHasMoreSchedules] = useState(false);
   const [loadingMoreSchedules, setLoadingMoreSchedules] = useState(false);
   const [scheduleDeleteBarVisible, setScheduleDeleteBarVisible] = useState(false);
+  const [totalSchedules, setTotalSchedules] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const nextScheduleCursorRef = useRef<string | null>(null);
+  const initialLoadDoneRef = useRef(false);
 
   useEffect(() => {
     if (activeTab !== 'schedules') {
@@ -86,7 +89,7 @@ function MainApp() {
     [mergeScheduleItems],
   );
 
-  const loadSchedules = useCallback(async () => {
+  const loadSchedules = useCallback(async (includeToday = false) => {
     if (!accessToken) {
       setSchedules([]);
       setHasMoreSchedules(false);
@@ -94,9 +97,48 @@ function MainApp() {
       return;
     }
 
-    const data = await listSchedulesApi(accessToken, { limit: 20 });
-    applyScheduleScroll(data, true);
-  }, [accessToken, applyScheduleScroll]);
+    if (!includeToday) {
+      const data = await listSchedulesApi(accessToken, { limit: 20 });
+      applyScheduleScroll(data, true);
+      if (data.total !== undefined) {
+        setTotalSchedules(data.total);
+      }
+      return;
+    }
+
+    // 初始化：列表 + 今日并行拉取，一次性 setState，避免闪白
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
+    lastFetchedDateRef.current = dateStr;
+
+    const [listResult, todayResult] = await Promise.all([
+      listSchedulesApi(accessToken, { limit: 20 }),
+      listSchedulesApi(accessToken, { startDate: dateStr, endDate: dateStr, limit: 50 }),
+    ]);
+
+    // 合并两个结果后再一次性设置
+    const listItems = listResult.records.map(scheduleVoToItem);
+    const todayItems = todayResult.records.map(scheduleVoToItem);
+    const merged = mergeScheduleItems(listItems, todayItems);
+    setSchedules(merged);
+    setHasMoreSchedules(listResult.hasMore);
+    nextScheduleCursorRef.current = listResult.nextCursor;
+    if (listResult.total !== undefined) {
+      setTotalSchedules(listResult.total);
+    }
+  }, [accessToken, applyScheduleScroll, mergeScheduleItems]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadSchedules(true);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadSchedules]);
 
   const lastFetchedDateRef = useRef<string | null>(null);
 
@@ -152,10 +194,17 @@ function MainApp() {
       setSchedules([]);
       setHasMoreSchedules(false);
       nextScheduleCursorRef.current = null;
+      initialLoadDoneRef.current = false;
       return;
     }
 
-    loadSchedules().catch((error) => {
+    // Token 刷新时不重复拉取，避免 reset=true 覆盖已合并的按日数据
+    if (initialLoadDoneRef.current) {
+      return;
+    }
+    initialLoadDoneRef.current = true;
+
+    loadSchedules(true).catch((error) => {
       console.error('[schedules] load failed:', error);
     });
   }, [isBootstrapping, isLoggedIn, accessToken, loadSchedules]);
@@ -228,6 +277,7 @@ function MainApp() {
       setSchedules((prev) =>
         [...prev, item].sort((a, b) => a.startTime.getTime() - b.startTime.getTime()),
       );
+      setTotalSchedules((prev) => prev + 1);
       await scheduleReminderForSchedule(item);
     },
     [accessToken, isLoggedIn],
@@ -264,6 +314,7 @@ function MainApp() {
       await deleteSchedulesApi(accessToken, scheduleIds);
       const idSet = new Set(scheduleIds);
       setSchedules((prev) => prev.filter((item) => !idSet.has(item.id)));
+      setTotalSchedules((prev) => Math.max(0, prev - scheduleIds.length));
       if (selectedScheduleId && idSet.has(selectedScheduleId)) {
         setSelectedScheduleId(null);
       }
@@ -351,6 +402,14 @@ function MainApp() {
               <SafeAreaView style={styles.container} edges={['top']}>
                 <ScrollView
                   showsVerticalScrollIndicator={false}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={refreshing}
+                      onRefresh={handleRefresh}
+                      colors={[colors.primary]}
+                      tintColor={colors.primary}
+                    />
+                  }
                   contentContainerStyle={[
                     styles.scrollContent,
                     { paddingBottom: tabBarInset + spacing.sm },
@@ -379,11 +438,13 @@ function MainApp() {
               hasMore={hasMoreSchedules}
               loadingMore={loadingMoreSchedules}
               bottomInset={tabBarInset}
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
             />
           )}
 
           {activeTab === 'mine' && (
-            <MineScreen scheduleCount={schedules.length} bottomInset={tabBarInset} />
+            <MineScreen scheduleCount={totalSchedules} bottomInset={tabBarInset} onTabChange={setActiveTab} refreshing={refreshing} onRefresh={handleRefresh} />
           )}
 
           {!(activeTab === 'schedules' && scheduleDeleteBarVisible) && (
@@ -409,7 +470,7 @@ function MainApp() {
     <>
       <StatusBar style="dark" />
       {screenContent}
-      <FloatingAssistant onScheduleCreated={loadSchedules} />
+      <FloatingAssistant isLoggedIn={isLoggedIn} onScheduleCreated={loadSchedules} />
     </>
   );
 }

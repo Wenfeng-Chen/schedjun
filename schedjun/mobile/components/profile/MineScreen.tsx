@@ -3,6 +3,7 @@ import { useState } from 'react';
 import {
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,12 +15,17 @@ import { useAuth } from '../../context/AuthContext';
 import { fonts } from '../../constants/fonts';
 import { colors, radius, spacing } from '../../constants/theme';
 import { formatUserCreatedAt } from '../../constants/userTypes';
+import { MainTab } from '../navigation/BottomTabBar';
+import AboutScreen from './AboutScreen';
 import AuthScreen, { AuthMode } from './AuthScreen';
 import DefaultAvatar from './DefaultAvatar';
 
 interface MineScreenProps {
   scheduleCount: number;
   bottomInset: number;
+  onTabChange?: (tab: MainTab) => void;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 interface MenuItem {
@@ -51,9 +57,10 @@ function MenuRow({ item }: { item: MenuItem }) {
   );
 }
 
-export default function MineScreen({ scheduleCount, bottomInset }: MineScreenProps) {
+export default function MineScreen({ scheduleCount, bottomInset, onTabChange, refreshing = false, onRefresh }: MineScreenProps) {
   const { user, isLoggedIn, logout } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+  const [showAbout, setShowAbout] = useState(false);
   const joinedAt = formatUserCreatedAt(user?.createdAt);
 
   const handleLogout = () => {
@@ -67,10 +74,6 @@ export default function MineScreen({ scheduleCount, bottomInset }: MineScreenPro
     ]);
   };
 
-  const comingSoon = (title: string) => {
-    Alert.alert(title, '功能开发中，敬请期待');
-  };
-
   if (authMode) {
     return (
       <AuthScreen
@@ -81,24 +84,33 @@ export default function MineScreen({ scheduleCount, bottomInset }: MineScreenPro
     );
   }
 
+  if (showAbout) {
+    return <AboutScreen onClose={() => setShowAbout(false)} />;
+  }
+
   const menuItems: MenuItem[] = isLoggedIn
     ? [
-        { icon: 'shield-checkmark-outline', label: '账号与安全', onPress: () => comingSoon('账号与安全') },
-        { icon: 'notifications-outline', label: '提醒偏好', hint: '默认提醒、通知方式', onPress: () => comingSoon('提醒偏好') },
-        { icon: 'color-palette-outline', label: '外观设置', onPress: () => comingSoon('外观设置') },
-        { icon: 'help-circle-outline', label: '帮助与反馈', onPress: () => comingSoon('帮助与反馈') },
-        { icon: 'information-circle-outline', label: '关于日程君', hint: 'v1.0.0', onPress: () => comingSoon('关于日程君') },
+        { icon: 'information-circle-outline', label: '关于日程君', hint: 'v1.0.0', onPress: () => setShowAbout(true) },
         { icon: 'log-out-outline', label: '退出登录', danger: true, onPress: handleLogout },
       ]
     : [
-        { icon: 'help-circle-outline', label: '帮助与反馈', onPress: () => comingSoon('帮助与反馈') },
-        { icon: 'information-circle-outline', label: '关于日程君', hint: 'v1.0.0', onPress: () => comingSoon('关于日程君') },
+        { icon: 'information-circle-outline', label: '关于日程君', hint: 'v1.0.0', onPress: () => setShowAbout(true) },
       ];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          ) : undefined
+        }
         contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomInset + spacing.md }]}
       >
         <Text style={styles.pageTitle}>我的</Text>
@@ -144,10 +156,10 @@ export default function MineScreen({ scheduleCount, bottomInset }: MineScreenPro
 
         {isLoggedIn && (
           <View style={styles.statsRow}>
-            <View style={styles.statCard}>
+            <Pressable style={styles.statCard} onPress={() => onTabChange?.('schedules')}>
               <Text style={styles.statValue}>{scheduleCount}</Text>
               <Text style={styles.statLabel}>全部日程</Text>
-            </View>
+            </Pressable>
             <View style={styles.statCard}>
               <Text style={styles.statValue}>君听</Text>
               <Text style={styles.statLabel}>语音助手</Text>
