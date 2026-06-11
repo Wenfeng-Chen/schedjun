@@ -114,6 +114,61 @@ public class ScheduleService {
         return toScheduleVO(schedule, resolveTimezone(user));
     }
 
+    /**
+     * 部分更新：只覆盖 dto 中非空字段到已有日程，不要求全字段。
+     */
+    @Transactional
+    public ScheduleVO partialUpdate(CreateScheduleDTO dto) {
+        Long userId = BaseContext.getCurrentId();
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录");
+        }
+
+        Long scheduleId = parseScheduleId(dto.getId());
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+
+        Schedule schedule = requireOwnedSchedule(userId, scheduleId);
+        boolean changed = false;
+
+        if (StringUtils.hasText(dto.getTitle())) {
+            schedule.setTitle(dto.getTitle().trim());
+            changed = true;
+        }
+        if (dto.getStartTime() != null && dto.getEndTime() != null) {
+            if (!dto.getEndTime().isAfter(dto.getStartTime())) {
+                throw new IllegalArgumentException("结束时间需晚于开始时间");
+            }
+            ZoneId zoneId = ZoneId.of(resolveTimezone(user));
+            schedule.setStartTime(toLocalDateTime(dto.getStartTime(), zoneId));
+            schedule.setEndTime(toLocalDateTime(dto.getEndTime(), zoneId));
+            changed = true;
+        }
+        if (StringUtils.hasText(dto.getNotes())) {
+            schedule.setNotes(normalizeNotes(dto.getNotes()));
+            changed = true;
+        }
+        if (dto.getRepeat() != null) {
+            schedule.setRepeatJson(toJson(normalizeRepeat(dto.getRepeat())));
+            changed = true;
+        }
+        if (dto.getReminder() != null) {
+            schedule.setReminderJson(toJson(normalizeReminder(dto.getReminder())));
+            changed = true;
+        }
+
+        if (!changed) {
+            throw new IllegalArgumentException("没有可更新的字段");
+        }
+
+        schedule.setUpdatedAt(LocalDateTime.now());
+        scheduleMapper.updateById(schedule);
+
+        return toScheduleVO(schedule, resolveTimezone(user));
+    }
+
     @Transactional
     public ScheduleDeleteVO delete(List<String> scheduleIdParams) {
         Long userId = BaseContext.getCurrentId();

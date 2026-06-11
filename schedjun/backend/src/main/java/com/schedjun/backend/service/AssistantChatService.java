@@ -7,6 +7,7 @@ import com.schedjun.backend.common.model.ScheduleDraft;
 import com.schedjun.backend.tool.CreateScheduleToolRequest;
 import com.schedjun.backend.tool.ScheduleTools;
 import com.schedjun.backend.tool.ScheduleTools.PendingDelete;
+import com.schedjun.backend.tool.ScheduleTools.PendingUpdate;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
@@ -50,8 +51,8 @@ public class AssistantChatService {
 
             CreateScheduleToolRequest pendingRequest = ScheduleTools.consumePendingRequest();
             List<PendingDelete> pendingDeletes = ScheduleTools.consumePendingDeletions();
-            Integer updateCount = ScheduleTools.consumeUpdateCount();
-            boolean toolCalled = pendingRequest != null || !pendingDeletes.isEmpty() || updateCount != null;
+            PendingUpdate pendingUpdate = ScheduleTools.consumePendingUpdate();
+            boolean toolCalled = pendingRequest != null || !pendingDeletes.isEmpty() || pendingUpdate != null;
 
             String intent;
             ScheduleDraft draft = null;
@@ -72,11 +73,9 @@ public class AssistantChatService {
             } else if (pendingRequest != null) {
                 intent = "create_schedule";
                 draft = buildDraft(pendingRequest);
-            } else if (updateCount != null) {
+            } else if (pendingUpdate != null) {
                 intent = "update_schedule";
-                if (updateCount > 0) {
-                    draft = new ScheduleDraft();
-                }
+                draft = buildDraftFromUpdate(pendingUpdate);
             } else {
                 intent = "chitchat";
                 if (StringUtils.hasText(reply) && isClarify(reply)) {
@@ -111,6 +110,26 @@ public class AssistantChatService {
         reminder.setPreset(StringUtils.hasText(request.getReminderPreset()) ? request.getReminderPreset().trim() : "atStart");
         draft.setReminder(reminder);
 
+        return draft;
+    }
+
+    private ScheduleDraft buildDraftFromUpdate(PendingUpdate pending) {
+        ScheduleDraft draft = new ScheduleDraft();
+        if (pending.condition().id() != null) {
+            draft.setScheduleId("sch_" + pending.condition().id());
+        }
+        if (StringUtils.hasText(pending.updateValue().title())) {
+            draft.setTitle(pending.updateValue().title().trim());
+        }
+        if (StringUtils.hasText(pending.updateValue().startTime())) {
+            draft.setStartTime(OffsetDateTime.parse(pending.updateValue().startTime().trim()));
+        }
+        if (StringUtils.hasText(pending.updateValue().endTime())) {
+            draft.setEndTime(OffsetDateTime.parse(pending.updateValue().endTime().trim()));
+        }
+        if (StringUtils.hasText(pending.updateValue().notes())) {
+            draft.setNotes(pending.updateValue().notes().trim());
+        }
         return draft;
     }
 

@@ -86,7 +86,7 @@ public class AssistantService {
                 toolResult.getScheduleDraft()
         );
 
-        boolean needConfirm = (CREATE_INTENT.equals(toolResult.getIntent()) || DELETE_INTENT.equals(toolResult.getIntent())) && toolResult.isToolCalled();
+        boolean needConfirm = (CREATE_INTENT.equals(toolResult.getIntent()) || DELETE_INTENT.equals(toolResult.getIntent()) || UPDATE_INTENT.equals(toolResult.getIntent())) && toolResult.isToolCalled();
 
         log.info("textToSchedule 完成: intent={}, toolCalled={}, needConfirm={}, messageId={}",
                 toolResult.getIntent(), toolResult.isToolCalled(), needConfirm, messageId);
@@ -129,9 +129,9 @@ public class AssistantService {
 
         if (UPDATE_INTENT.equals(intent)) {
             if (!isUpdateDraftComplete(draft)) {
-                throw new IllegalArgumentException("日程信息不完整");
+                throw new IllegalArgumentException("未指定要更新的日程");
             }
-            ScheduleVO schedule = scheduleService.update(toCreateDto(draft));
+            ScheduleVO schedule = scheduleService.partialUpdate(toCreateDto(draft));
             return new AssistantConfirmVO("日程已更新。", schedule);
         }
 
@@ -199,7 +199,7 @@ public class AssistantService {
     }
 
     private boolean isUpdateDraftComplete(ScheduleDraft draft) {
-        return isCreateDraftComplete(draft) && StringUtils.hasText(draft.getScheduleId());
+        return draft != null && StringUtils.hasText(draft.getScheduleId());
     }
 
     private boolean isDeleteDraftComplete(ScheduleDraft draft) {
