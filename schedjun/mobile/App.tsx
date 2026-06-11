@@ -26,6 +26,7 @@ import { ScheduleItem } from './constants/scheduleTypes';
 import { colors, spacing } from './constants/theme';
 import { scheduleToFormData } from './utils/scheduleDetailUtils';
 import { scheduleVoToItem } from './utils/scheduleApiUtils';
+import { getSchedulesForDate } from './utils/scheduleDetailUtils';
 import {
   scheduleReminderForSchedule,
   syncScheduleReminders,
@@ -93,9 +94,36 @@ function MainApp() {
       return;
     }
 
-    const data = await listSchedulesApi(accessToken);
+    const data = await listSchedulesApi(accessToken, { limit: 20 });
     applyScheduleScroll(data, true);
   }, [accessToken, applyScheduleScroll]);
+
+  const lastFetchedDateRef = useRef<string | null>(null);
+
+  const formatDateStr = useCallback((date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  const handleCalendarSelectDate = useCallback(
+    (date: Date) => {
+      if (!accessToken) return;
+
+      const existing = getSchedulesForDate(schedules, date);
+      if (existing.length > 0) return;
+
+      const dateStr = formatDateStr(date);
+      if (dateStr === lastFetchedDateRef.current) return;
+      lastFetchedDateRef.current = dateStr;
+
+      listSchedulesApi(accessToken, { startDate: dateStr, endDate: dateStr, limit: 50 })
+        .then((data) => applyScheduleScroll(data, false))
+        .catch((err) => console.error('[schedules] date fetch failed:', err));
+    },
+    [accessToken, schedules, formatDateStr, applyScheduleScroll],
+  );
 
   const loadMoreSchedules = useCallback(async () => {
     if (!accessToken || !hasMoreSchedules || loadingMoreSchedules || !nextScheduleCursorRef.current) {
@@ -332,6 +360,7 @@ function MainApp() {
                     schedules={schedules}
                     onAddPress={handleCalendarAddPress}
                     onSchedulePress={openScheduleDetail}
+                    onSelectDate={handleCalendarSelectDate}
                   />
                 </ScrollView>
               </SafeAreaView>

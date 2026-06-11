@@ -31,6 +31,7 @@ interface CalendarViewProps {
   schedules: ScheduleItem[];
   onAddPress?: (selectedDate: Date) => void;
   onSchedulePress?: (scheduleId: string) => void;
+  onSelectDate?: (date: Date) => void;
   contentBottomInset?: number;
 }
 
@@ -38,6 +39,7 @@ export default function CalendarView({
   schedules,
   onAddPress,
   onSchedulePress,
+  onSelectDate,
   contentBottomInset = 0,
 }: CalendarViewProps) {
   const today = useMemo(() => {
@@ -94,8 +96,9 @@ export default function CalendarView({
         monthOffset: diff,
         selectedDate: normalized,
       });
+      onSelectDate?.(normalized);
     },
-    [baseMonth],
+    [baseMonth, onSelectDate],
   );
 
   const showJumpToToday = !isSameDay(selectedDate, today);
