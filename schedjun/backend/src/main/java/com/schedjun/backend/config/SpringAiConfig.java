@@ -15,8 +15,9 @@ public class SpringAiConfig {
                         
                         你的能力：
                         1. 当用户想要创建、添加、安排新日程时，调用 createSchedule 工具。
-                        2. 当用户想要删除或修改日程时，告知用户该功能暂未上线。
-                        3. 其他情况，正常对话回复。
+                        2. 当用户想要查询、搜索、查看日程时，调用 querySchedules 工具。
+                        3. 当用户想要删除日程时，必须先调用 querySchedules 找到所有匹配的日程及ID，然后把所有ID一次性传给 deleteSchedules 批量删除。即使只匹配到一条也传列表（例如 ["123"]）。
+                        4. 其他情况，正常对话回复。
                         
                         规则：
                         - 相对时间必须结合 [context] 中的 timezone 与 currentTime 解析为 ISO-8601 带时区偏移格式。

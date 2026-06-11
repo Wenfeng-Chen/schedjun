@@ -6,6 +6,7 @@ import com.schedjun.backend.common.model.RepeatRule;
 import com.schedjun.backend.common.model.ScheduleDraft;
 import com.schedjun.backend.tool.CreateScheduleToolRequest;
 import com.schedjun.backend.tool.ScheduleTools;
+import com.schedjun.backend.tool.ScheduleTools.PendingDelete;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
@@ -15,6 +16,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -47,12 +49,26 @@ public class AssistantChatService {
                     .content();
 
             CreateScheduleToolRequest pendingRequest = ScheduleTools.consumePendingRequest();
-            boolean toolCalled = pendingRequest != null;
+            List<PendingDelete> pendingDeletes = ScheduleTools.consumePendingDeletions();
+            boolean toolCalled = pendingRequest != null || !pendingDeletes.isEmpty();
 
             String intent;
             ScheduleDraft draft = null;
 
-            if (toolCalled) {
+            if (!pendingDeletes.isEmpty()) {
+                intent = "delete_schedule";
+                draft = new ScheduleDraft();
+                String ids = pendingDeletes.stream()
+                        .map(d -> "sch_" + d.scheduleId())
+                        .collect(Collectors.joining(","));
+                draft.setScheduleId(ids);
+                if (!StringUtils.hasText(reply) || reply.contains("确认删除")) {
+                    String titles = pendingDeletes.stream()
+                            .map(PendingDelete::title)
+                            .collect(Collectors.joining("」「"));
+                    reply = "确认删除「" + titles + "」这 " + pendingDeletes.size() + " 条日程吗？";
+                }
+            } else if (pendingRequest != null) {
                 intent = "create_schedule";
                 draft = buildDraft(pendingRequest);
             } else {
