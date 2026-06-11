@@ -13,7 +13,10 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -24,6 +27,9 @@ public class ScheduleTools {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private static final ThreadLocal<CreateScheduleToolRequest> PENDING_REQUEST = new ThreadLocal<>();
+    private static final ThreadLocal<List<PendingDelete>> PENDING_DELETIONS = ThreadLocal.withInitial(ArrayList::new);
+
+    public record PendingDelete(Long scheduleId, String title) {}
 
     @Autowired
     private ScheduleMapper scheduleMapper;
@@ -95,10 +101,66 @@ public class ScheduleTools {
         return buildResult(schedules);
     }
 
+    @Tool(description = "批量删除日程。传入日程ID列表（数字或 sch_xxx 格式）。"
+            + "当用户想删除一条或多条日程时调用此工具，将所有要删的ID一次性传入。"
+            + "必须先调用 querySchedules 查询出要删除的日程及其ID，然后从结果中提取所有ID传入。"
+            + "本工具不会直接删除，需要用户确认后才会执行。")
+    public String deleteSchedules(List<String> scheduleIds) {
+        Long userId = BaseContext.getCurrentId();
+        if (userId == null) {
+            return "删除失败：用户未登录。";
+        }
+        if (scheduleIds == null || scheduleIds.isEmpty()) {
+            return "删除失败：请提供要删除的日程ID。";
+        }
+
+        List<PendingDelete> pendingList = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+        for (String sid : scheduleIds) {
+            Long parsedId = parseId(sid.trim());
+            if (parsedId == null) {
+                errors.add(sid + "：无效的ID");
+                continue;
+            }
+            Schedule schedule = scheduleMapper.selectById(parsedId);
+            if (schedule == null) {
+                errors.add(sid + "：未找到");
+                continue;
+            }
+            if (!userId.equals(schedule.getUserId())) {
+                errors.add(schedule.getTitle() + "：无权删除");
+                continue;
+            }
+            pendingList.add(new PendingDelete(parsedId, schedule.getTitle()));
+        }
+
+        PENDING_DELETIONS.get().addAll(pendingList);
+        log.info("Tool [deleteSchedules] 等待确认: userId={}, count={}, titles={}",
+                userId, pendingList.size(),
+                pendingList.stream().map(PendingDelete::title).collect(Collectors.joining(",")));
+
+        if (pendingList.isEmpty()) {
+            return "删除失败：" + String.join("；", errors);
+        }
+
+        String titles = pendingList.stream().map(PendingDelete::title).collect(Collectors.joining("」「"));
+        String msg = "确认删除「" + titles + "」这 " + pendingList.size() + " 条日程吗？";
+        if (!errors.isEmpty()) {
+            msg += "\n（" + String.join("；", errors) + "）";
+        }
+        return msg;
+    }
+
     public static CreateScheduleToolRequest consumePendingRequest() {
         CreateScheduleToolRequest request = PENDING_REQUEST.get();
         PENDING_REQUEST.remove();
         return request;
+    }
+
+    public static List<PendingDelete> consumePendingDeletions() {
+        List<PendingDelete> list = new ArrayList<>(PENDING_DELETIONS.get());
+        PENDING_DELETIONS.get().clear();
+        return list;
     }
 
     /**
@@ -202,7 +264,7 @@ public class ScheduleTools {
 
         for (int i = 0; i < schedules.size(); i++) {
             Schedule s = schedules.get(i);
-            sb.append("\n").append(i + 1).append(". ").append(s.getTitle());
+            sb.append("\n").append(i + 1).append(". [ID:").append(s.getId()).append("] ").append(s.getTitle());
 
             if (s.getStartTime() != null) {
                 sb.append(" 时间：").append(s.getStartTime().format(fmt));

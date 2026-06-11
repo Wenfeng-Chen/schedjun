@@ -2,8 +2,6 @@ package com.schedjun.backend.common.model;
 
 import lombok.Data;
 
-import java.util.List;
-
 @Data
 public class RepeatRule {
 

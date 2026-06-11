@@ -24,7 +24,9 @@ import org.springframework.util.StringUtils;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -87,7 +89,7 @@ public class AssistantService {
                 toolResult.getScheduleDraft()
         );
 
-        boolean needConfirm = CREATE_INTENT.equals(toolResult.getIntent()) && toolResult.isToolCalled();
+        boolean needConfirm = (CREATE_INTENT.equals(toolResult.getIntent()) || DELETE_INTENT.equals(toolResult.getIntent())) && toolResult.isToolCalled();
 
         log.info("textToSchedule 完成: intent={}, toolCalled={}, needConfirm={}, messageId={}",
                 toolResult.getIntent(), toolResult.isToolCalled(), needConfirm, messageId);
@@ -140,8 +142,12 @@ public class AssistantService {
             if (!isDeleteDraftComplete(draft)) {
                 throw new IllegalArgumentException("未指定要删除的日程");
             }
-            scheduleService.delete(List.of(draft.getScheduleId().trim()));
-            return new AssistantConfirmVO("日程已删除。", null);
+            List<String> scheduleIdList = Arrays.stream(draft.getScheduleId().split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::hasText)
+                    .collect(Collectors.toList());
+            scheduleService.delete(scheduleIdList);
+            return new AssistantConfirmVO("已删除 " + scheduleIdList.size() + " 条日程。", null);
         }
 
         if (!isCreateDraftComplete(draft)) {
