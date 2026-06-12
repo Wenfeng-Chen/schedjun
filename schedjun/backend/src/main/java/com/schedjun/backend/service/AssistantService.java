@@ -211,25 +211,22 @@ public class AssistantService {
         if (StringUtils.hasText(draft.getScheduleId())) {
             dto.setId(draft.getScheduleId().trim());
         }
-        dto.setTitle(draft.getTitle().trim());
-        dto.setStartTime(draft.getStartTime());
-        dto.setEndTime(draft.getEndTime());
+        if (StringUtils.hasText(draft.getTitle())) {
+            dto.setTitle(draft.getTitle().trim());
+        }
+        if (draft.getStartTime() != null) {
+            dto.setStartTime(draft.getStartTime());
+        }
+        if (draft.getEndTime() != null) {
+            dto.setEndTime(draft.getEndTime());
+        }
         dto.setNotes(draft.getNotes() == null ? "" : draft.getNotes());
         dto.setAllDay(Boolean.TRUE.equals(draft.getAllDay()));
 
         RepeatRule repeat = draft.getRepeat();
-        if (repeat == null) {
-            repeat = new RepeatRule();
-            repeat.setPreset("never");
-        }
         dto.setRepeat(repeat);
 
         ReminderRule reminder = draft.getReminder();
-        if (reminder == null) {
-            reminder = new ReminderRule();
-            reminder.setEnabled(true);
-            reminder.setPreset("atStart");
-        }
         dto.setReminder(reminder);
         return dto;
     }

@@ -23,9 +23,21 @@ public class CreateScheduleToolRequest {
     /** 重复规则预设：never / daily / weekly / monthly / yearly / custom */
     private String repeatPreset;
 
+    /** 自定义重复：间隔数值（仅 preset=custom 时生效，例如每周二的2 → value=2, unit=week） */
+    private Integer repeatCustomValue;
+
+    /** 自定义重复：间隔单位（day / week / month / year） */
+    private String repeatCustomUnit;
+
     /** 是否启用提醒，默认 true */
     private Boolean reminderEnabled;
 
     /** 提醒规则预设：atStart / min5 / min15 / min30 / hour1 / custom */
     private String reminderPreset;
+
+    /** 自定义提醒：提前数值（仅 preset=custom 时生效，例如提前30分钟 → value=30, unit=minute） */
+    private Integer reminderCustomValue;
+
+    /** 自定义提醒：提前单位（minute / hour / day） */
+    private String reminderCustomUnit;
 }

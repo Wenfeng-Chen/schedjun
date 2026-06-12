@@ -1,8 +1,8 @@
 # Schedjun 后端 API 接口参考
 
-> 技术栈：Java Spring Boot · MySQL · Spring AI · 讯飞 ASR  
-> 版本：v1 · Base URL：`https://api.example.com/api/v1`  
-> 与现有移动端 `ScheduleItem` / 君听聊天层字段对齐
+> 技术栈：Java Spring Boot 3.5 · MyBatis-Plus · MySQL · Spring AI  
+> 版本：v1 · Base URL：`http://{host}:{port}`
+> 接口均以 JSON 交互，认证后需携带 Token
 
 ---
 
@@ -10,25 +10,40 @@
 
 ### 1.1 请求头
 
+| Header          | 必填  | 说明                     |
+| --------------- | --- | ---------------------- |
+| `Authorization` | 是*  | `Bearer {accessToken}` |
+| `Content-Type`  | 全接口 | `application/json`      |
 
-| Header          | 必填  | 说明                                         |
-| --------------- | --- | ------------------------------------------ |
-| `Authorization` | 是*  | `Bearer {accessToken}`                     |
-| `Content-Type`  | 视接口 | `application/json` 或 `multipart/form-data` |
-| `X-Request-Id`  | 否   | 链路追踪 UUID                                  |
+> * 注册、登录除外
 
+### 1.2 统一响应格式 `Result<T>`
 
- 登录、注册、健康检查除外
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": { ... }
+}
+```
 
-### 1.2 时间格式
+- `code=0` 成功，非 0 为业务错误
+- `data` 为各接口具体返回数据
 
-- 请求/响应统一：**ISO 8601**，带时区  
-例：`2026-05-30T15:00:00+08:00`
-- 数据库存储建议：`DATETIME(3)` + 用户时区字段，或统一 UTC
+### 1.3 时间格式
+
+请求/响应统一 **ISO 8601** 带时区偏移，如 `2026-06-11T15:00:00+08:00`
 
 ---
 
 ## 二、认证模块
+
+> 完成用户注册与登录，签发 JWT Token 用于后续接口鉴权。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- | 
+| `POST` | `/auth/register` | 用户注册 |
+| `POST` | `/auth/login` | 用户登录 | 
 
 ### 2.1 注册
 
@@ -39,7 +54,7 @@
 ```json
 {
   "username": "wenfeng",
-  "password": "******"
+  "password": "********"
 }
 ```
 
@@ -53,40 +68,25 @@
 }
 ```
 
----
-
 ### 2.2 登录
 
 `POST /auth/login`
 
-**Body：**
+**Body：** 同注册
 
-```json
-{
-  "username": "wenfeng",
-  "password": "******"
-}
-```
-
-**Response：** 同注册
+**Response data：** 同注册
 
 ---
 
-### 2.3 刷新 Token
+## 三、用户模块
 
-`POST /auth/refresh`
+> 获取当前登录用户信息，包括用户名、时区等。
 
-**Body：**
+| 方法 | 路径 | 说明 |
+| --- | --- | --- | 
+| `GET` | `/users/me` | 当前用户信息 | 
 
-```json
-{
-  "refreshToken": "rt_xxx"
-}
-```
-
----
-
-### 2.4 当前用户信息
+### 3.1 当前用户信息
 
 `GET /users/me`
 
@@ -103,65 +103,41 @@
 
 ---
 
-## 三、日程模块
+## 四、日程模块
 
-> 与移动端 `ScheduleItem`、`RepeatRule`、`ReminderRule` 一一对应
+> 日程的增删改查核心业务，支持批量删除和游标滚动加载。
 
-### 3.1 日程对象 ScheduleVO
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/schedules` | 创建日程 |
+| `PUT` | `/schedules` | 更新日程 | 
+| `DELETE` | `/schedules` | 批量删除日程 | 
+| `GET` | `/schedules` | 滚动查询日程列表 | 
+
+### 4.1 日程对象 ScheduleVO
 
 ```json
 {
   "id": "sch_90001",
-  "title": "文华在线教育 Java 实习生 线下面试",
-  "startTime": "2026-03-05T15:00:00+08:00",
-  "endTime": "2026-03-05T16:00:00+08:00",
-  "notes": "候选人：张三\n面试职位：java 实习生",
-  "repeat": {
-    "preset": "never",
-    "custom": null
-  },
-  "reminder": {
-    "enabled": true,
-    "preset": "min30",
-    "custom": null
-  },
+  "title": "团队周会",
+  "startTime": "2026-06-11T10:00:00+08:00",
+  "endTime": "2026-06-11T11:00:00+08:00",
+  "notes": "讨论本周进度",
+  "repeat": { "preset": "weekly", "custom": null },
+  "reminder": { "enabled": true, "preset": "min15", "custom": null },
   "source": "manual",
-  "createdAt": "2026-03-01T09:00:00+08:00",
-  "updatedAt": "2026-03-01T09:00:00+08:00"
+  "createdAt": "2026-06-01T09:00:00+08:00",
+  "updatedAt": "2026-06-01T09:00:00+08:00"
 }
 ```
 
-**repeat.preset 枚举：** `never` | `daily` | `weekly` | `monthly` | `yearly` | `custom`
+**repeat.preset：** `never` | `daily` | `weekly` | `monthly` | `yearly` | `custom`
 
-**repeat.custom（preset=custom 时）：**
+**reminder.preset：** `none` | `atStart` | `min5` | `min10` | `min15` | `min30` | `custom`
 
-```json
-{
-  "frequency": "week",
-  "interval": 1,
-  "weekdays": [1, 3, 5],
-  "monthDays": [],
-  "monthMode": "date",
-  "yearMonths": []
-}
-```
+**source：** `manual` | `voice` | `ai`
 
-**reminder.preset 枚举：** `none` | `atStart` | `min5` | `min10` | `min15` | `min30` | `custom`
-
-**reminder.custom（preset=custom 时）：**
-
-```json
-{
-  "value": 3,
-  "unit": "hour"
-}
-```
-
-**source 枚举：** `manual` | `voice` | `ai`
-
----
-
-### 3.2 创建日程
+### 4.2 创建日程
 
 `POST /schedules`
 
@@ -171,8 +147,8 @@
 {
   "id": "sch_90001",
   "title": "团队周会",
-  "startTime": "2026-05-30T10:00:00+08:00",
-  "endTime": "2026-05-30T11:00:00+08:00",
+  "startTime": "2026-06-11T10:00:00+08:00",
+  "endTime": "2026-06-11T11:00:00+08:00",
   "notes": "",
   "allDay": false,
   "repeat": { "preset": "weekly" },
@@ -182,23 +158,17 @@
 
 **Response data：** `ScheduleVO`
 
----
-
-### 3.3 更新日程
+### 4.3 更新日程
 
 `PUT /schedules`
 
-**Body：** 完整字段，同 3.2 创建结构。
+**Body：** 同 4.2 创建结构（包含 `id` 定位要更新的日程）
 
-**Response data：** 更新后的完整 `ScheduleVO`
+**Response data：** 更新后的 `ScheduleVO`
 
----
-
-### 3.5 删除日程
+### 4.4 批量删除日程
 
 `DELETE /schedules`
-
-单个删除与批量删除共用此接口，传 1 个或多个 ID 即可。
 
 **Body：**
 
@@ -217,31 +187,17 @@
 }
 ```
 
----
-
-### 3.6 日程详情
-
-`GET /schedules/{scheduleId}`
-
-**Response data：** `ScheduleVO`
-
----
-
-### 3.7 日程列表（我的日程）
+### 4.5 日程列表（滚动加载）
 
 `GET /schedules`
 
-滚动加载，按 `startTime` 升序返回。首次不传 `cursor`，触底后用上一批响应里的 `nextCursor` 继续拉取。
-
-**Query：**
-
-| 参数          | 类型     | 说明                                      |
-| ----------- | ------ | --------------------------------------- |
-| `startDate` | string | 筛选起始日期 `2026-05-01`                     |
-| `endDate`   | string | 筛选结束日期 `2026-05-31`                     |
-| `keyword`   | string | 标题/备注模糊搜索                               |
-| `cursor`    | string | 滚动游标，首次不传；取上一批 `nextCursor`            |
-| `limit`     | int    | 每批条数，默认 `20`，最大 `50`                    |
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `startDate` | string | 否 | 筛选起始日期，如 `2026-06-01` |
+| `endDate` | string | 否 | 筛选结束日期，如 `2026-06-30` |
+| `keyword` | string | 否 | 标题/备注模糊搜索 |
+| `cursor` | string | 否 | 滚动游标，首次不传，取上批 `nextCursor` |
+| `limit` | int | 否 | 每批条数，默认 `20`，最大 `50` |
 
 **Response data：**
 
@@ -249,121 +205,67 @@
 {
   "records": [ /* ScheduleVO[] */ ],
   "hasMore": true,
-  "nextCursor": "2026-05-30T10:00:00|123"
+  "nextCursor": "2026-06-11T10:00:00|123",
+  "total": 156
 }
 ```
 
-- `records`：本批日程，按 `startTime` 升序
+- `records`：按 `startTime` 升序
 - `hasMore`：是否还有下一批
-- `nextCursor`：下一批游标；`hasMore=false` 时为 `null`
-- 游标格式：`{startTime}|{scheduleId}`，`startTime` 为 ISO 本地时间，`scheduleId` 为数据库自增 ID
+- `nextCursor`：下一批游标，`hasMore=false` 时为 `null`
+- `total`：该用户全部日程总数
 
 ---
 
-### 3.8 按日查询（首页日历）
+## 五、语音交互模块
 
-`GET /schedules/by-date`
+> AI 语音助手"君听"的核心接口。用户发送自然语言文本，AI 识别意图并返回回复；确认后执行增删改。
 
-**Query：**
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/assistant/text-to-schedule` | 文本理解（主入口） | 
+| `POST` | `/assistant/confirm` | 确认/取消草稿 | 
 
+### 5.1 groupId 约定
 
-| 参数     | 类型     | 说明           |
-| ------ | ------ | ------------ |
-| `date` | string | `2026-05-30` |
+一次"打开助手面板 → 关闭面板"为一组交互，由**前端生成** `groupId`（UUID），不需调用后端创建会话。
 
+| 时机 | 行为 |
+| --- | --- |
+| 打开面板 | 生成 `groupId`，存 App 内存 |
+| 每轮请求 | 携带同一 `groupId` |
+| 关闭面板 | 丢弃 `groupId`（后端保留消息用于审计） |
 
-**Response data：**
+后端按 `groupId` 查询 `assistant_message` 历史消息拼成 AI 对话上下文。
+
+### 5.2 文本理解（主入口）
+
+`POST /assistant/text-to-schedule`
+
+**Body：**
 
 ```json
 {
-  "date": "2026-05-30",
-  "schedules": [ /* ScheduleVO[]，按 startTime 升序 */ ]
+  "groupId": "grp_abc123",
+  "text": "明天下午三点开会，提前半小时提醒我",
+  "timezone": "Asia/Shanghai",
+  "currentTime": "2026-06-11T21:00:00+08:00",
+  "autoConfirm": false
 }
 ```
-
----
-
-### 3.9 按月查询（日历打点）
-
-`GET /schedules/by-month`
-
-**Query：**
-
-
-| 参数      | 类型  | 说明      |
-| ------- | --- | ------- |
-| `year`  | int | 2026    |
-| `month` | int | 5（1-12） |
-
-
-**Response data：**
-
-```json
-{
-  "year": 2026,
-  "month": 5,
-  "datesWithSchedule": ["2026-05-05", "2026-05-30"]
-}
-```
-
----
-
-## 四、君听 · 语音助手模块
-
-> 流程：**音频 → 讯飞 ASR → 文本 → Spring AI（结合 groupId 上下文）→ 创建/查询日程**  
-> 产品形态：纯语音、无聊天列表 UI；用户说一句、AI 回一句，支持多轮追问（如「几点？」→「下午三点」）。
-
-### 4.1 groupId 约定
-
-一次「打开君听面板 → 关闭面板」视为一组交互，由**移动端生成** `groupId`（UUID），无需调用后端创建会话。
-
-
-| 时机     | 行为                                   |
-| ------ | ------------------------------------ |
-| 打开君听面板 | 生成 `groupId`，存 App 内存                |
-| 每轮语音请求 | 携带同一 `groupId`                       |
-| 关闭面板   | 丢弃 `groupId`（后端 message 仍保留，供上下文与审计） |
-
-
-后端收到请求后：
-
-1. 按 `groupId` 查询 `assistant_message` 最近 N 条（建议 10～20 条）
-2. 拼成 Spring AI 对话历史
-3. 写入本轮 user / assistant 消息
-
----
-
-### 4.2 语音交互（主入口 · ASR + AI 合并）
-
-`POST /assistant/voice-to-schedule`
-
-**Content-Type：** `multipart/form-data`
-
-
-| 字段            | 类型      | 必填  | 说明                          |
-| ------------- | ------- | --- | --------------------------- |
-| `groupId`     | string  | 是   | 一次打开面板的分组 ID                |
-| `audio`       | file    | 是   | pcm/wav/m4a，≤ 60s           |
-| `format`      | string  | 是   | `pcm` / `wav` / `speex`     |
-| `sampleRate`  | int     | 是   | 16000                       |
-| `language`    | string  | 否   | 默认 `zh_cn`                  |
-| `autoConfirm` | boolean | 否   | 默认 false；true 时信息完整则直接落库    |
-| `timezone`    | string  | 否   | 默认 `Asia/Shanghai`，辅助解析相对时间 |
-| `currentTime` | string  | 否   | 客户端当前时间 ISO 8601            |
-
 
 **Response data：**
 
 ```json
 {
   "groupId": "grp_abc123",
-  "asrText": "明天下午三点开会",
-  "reply": "好的，已为你创建「开会」，5月31日 15:00，提前30分钟提醒。",
+  "asrText": "明天下午三点开会，提前半小时提醒我",
+  "reply": "好的，已为你备好日程「开会」—— 6月12日 15:00，提前30分钟提醒。确认创建吗？",
   "intent": "create_schedule",
   "scheduleDraft": {
     "title": "开会",
-    "startTime": "2026-05-31T15:00:00+08:00",
-    "endTime": "2026-05-31T16:00:00+08:00",
+    "startTime": "2026-06-12T15:00:00+08:00",
+    "endTime": "2026-06-12T16:00:00+08:00",
     "notes": "",
     "allDay": false,
     "repeat": { "preset": "never" },
@@ -377,34 +279,19 @@
 
 **intent 枚举：**
 
+| 值 | 说明 |
+| --- | --- |
+| `create_schedule` | 创建日程 |
+| `update_schedule` | 修改日程 |
+| `delete_schedule` | 删除日程 |
+| `query_schedule` | 查询日程 |
+| `chitchat` | 闲聊 |
+| `clarify` | 需追问（信息不足） |
 
-| 值                 | 说明        |
-| ----------------- | --------- |
-| `create_schedule` | 创建日程      |
-| `update_schedule` | 修改日程      |
-| `delete_schedule` | 删除日程      |
-| `query_schedule`  | 查询日程      |
-| `chitchat`        | 闲聊        |
-| `clarify`         | 需追问（信息不足） |
+- `needConfirm=true` 时，前端展示确认卡片，用户确认/取消后调用 5.3
+- `needConfirm=false` 时（仅 `query_schedule` 和 `chitchat`），直接展示回复内容
 
-
-- `needConfirm=true` 时，移动端展示确认后再调 4.3。
-- `autoConfirm=true` 且解析成功时，`schedule` 返回已创建的 `ScheduleVO`，`needConfirm=false`。
-- `intent=clarify` 时，用户可继续说话，**同一 `groupId` 再调本接口**即可带上上下文。
-
-**多轮示例：**
-
-```
-第1轮 groupId=grp_xxx  audio="明天开会"
-  → reply="几点开始？"  intent=clarify
-
-第2轮 groupId=grp_xxx  audio="下午三点"
-  → reply="好的，已为你创建..."  intent=create_schedule  needConfirm=true
-```
-
----
-
-### 4.3 确认并创建日程
+### 5.3 确认交互
 
 `POST /assistant/confirm`
 
@@ -417,8 +304,8 @@
   "action": "confirm",
   "scheduleDraft": {
     "title": "开会",
-    "startTime": "2026-05-31T15:00:00+08:00",
-    "endTime": "2026-05-31T16:00:00+08:00",
+    "startTime": "2026-06-12T15:00:00+08:00",
+    "endTime": "2026-06-12T16:00:00+08:00",
     "allDay": false,
     "repeat": { "preset": "never" },
     "reminder": { "enabled": true, "preset": "min30" },
@@ -434,7 +321,7 @@
 ```json
 {
   "reply": "日程已创建。",
-  "schedule": { /* ScheduleVO，source 为 voice */ }
+  "schedule": { /* ScheduleVO */ }
 }
 ```
 
@@ -448,92 +335,30 @@
 
 ---
 
-### 4.4 语音转文字（可选 · 调试 ASR）
-
-`POST /assistant/asr`
-
-仅用于联调讯飞识别准确率，**正式产品流程走 4.2 即可**。
-
-**Content-Type：** `multipart/form-data`
-
-
-| 字段           | 类型     | 必填  | 说明                      |
-| ------------ | ------ | --- | ----------------------- |
-| `groupId`    | string | 否   | 可选，写入 message 审计        |
-| `audio`      | file   | 是   | pcm/wav/m4a，≤ 60s       |
-| `format`     | string | 是   | `pcm` / `wav` / `speex` |
-| `sampleRate` | int    | 是   | 16000                   |
-| `language`   | string | 否   | 默认 `zh_cn`              |
-
-
-**Response data：**
-
-```json
-{
-  "groupId": "grp_abc123",
-  "text": "明天下午三点开会，提前半小时提醒我",
-  "confidence": 0.96,
-  "durationMs": 3200,
-  "asrProvider": "iflytek"
-}
-```
-
----
-
-## 六、Spring 模块划分建议
+## 六、模块划分总结
 
 ```
-backend/
+backend/src/main/java/com/schedjun/backend/
 ├── controller/
-│   ├── AuthController.java
-│   ├── ScheduleController.java
-│   └── AssistantController.java
+│   ├── AuthController.java          # 认证模块
+│   ├── UserController.java          # 用户模块
+│   ├── ScheduleController.java      # 日程模块
+│   └── AssistantController.java     # 语音交互模块
 ├── service/
+│   ├── AuthService.java
+│   ├── UserService.java
 │   ├── ScheduleService.java
-│   ├── AssistantChatService.java      # Spring AI
-│   └── AsrService.java              # 讯飞 ASR 封装
-├── client/
-│   └── IflytekAsrClient.java
-├── dto/ / vo/ / entity/
-├── repository/
+│   ├── AssistantService.java        # 语音交互编排
+│   ├── AssistantChatService.java    # Spring AI 对话
+│   └── AssistantMessageService.java # 对话消息管理
+├── tool/
+│   └── ScheduleTools.java           # Spring AI @Tool 方法
+├── common/
+│   ├── entity/    # 数据库实体 (Schedule, User, AssistantMessage)
+│   ├── dto/       # 请求体
+│   ├── vo/        # 响应体
+│   ├── model/     # 内部模型 (RepeatRule, ReminderRule, ScheduleDraft)
+│   └── result/    # Result<T> 统一响应
 └── config/
-    ├── SpringAiConfig.java
-    └── IflytekConfig.java
+    └── SpringAiConfig.java
 ```
-
----
-
-## 七、移动端对接优先级
-
-
-| 优先级 | 接口                                  | 对应前端                |
-| --- | ----------------------------------- | ------------------- |
-| P0  | `GET /schedules/by-date`            | 首页日历 + 当日列表         |
-| P0  | `POST /schedules`                   | 创建日程页保存             |
-| P0  | `PUT /schedules/{id}`               | 编辑日程页保存（Body 传完整字段） |
-| P0  | `DELETE /schedules`                 | 详情页 / 多选删除         |
-| P1  | `POST /assistant/voice-to-schedule` | 君听语音主流程             |
-| P1  | `POST /assistant/confirm`           | AI 创建确认             |
-| P2  | `GET /schedules/by-month`           | 日历打点优化              |
-| P2  | `POST /assistant/asr`               | 仅转写（调试）             |
-
-
----
-
-## 八、健康检查
-
-`GET /health`
-
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "status": "UP",
-    "mysql": "UP",
-    "springAi": "UP",
-    "iflytekAsr": "UP"
-  }
-}
-```
-

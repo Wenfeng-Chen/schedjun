@@ -1,6 +1,8 @@
 package com.schedjun.backend.service;
 
 import com.schedjun.backend.common.model.AssistantToolResult;
+import com.schedjun.backend.common.model.CustomReminderConfig;
+import com.schedjun.backend.common.model.CustomRepeatConfig;
 import com.schedjun.backend.common.model.ReminderRule;
 import com.schedjun.backend.common.model.RepeatRule;
 import com.schedjun.backend.common.model.ScheduleDraft;
@@ -103,11 +105,23 @@ public class AssistantChatService {
 
         RepeatRule repeat = new RepeatRule();
         repeat.setPreset(StringUtils.hasText(request.getRepeatPreset()) ? request.getRepeatPreset().trim() : "never");
+        if ("custom".equals(repeat.getPreset()) && request.getRepeatCustomValue() != null) {
+            CustomRepeatConfig config = new CustomRepeatConfig();
+            config.setInterval(request.getRepeatCustomValue());
+            config.setFrequency(request.getRepeatCustomUnit());
+            repeat.setCustom(config);
+        }
         draft.setRepeat(repeat);
 
         ReminderRule reminder = new ReminderRule();
         reminder.setEnabled(!Boolean.FALSE.equals(request.getReminderEnabled()));
         reminder.setPreset(StringUtils.hasText(request.getReminderPreset()) ? request.getReminderPreset().trim() : "atStart");
+        if ("custom".equals(reminder.getPreset()) && request.getReminderCustomValue() != null) {
+            CustomReminderConfig config = new CustomReminderConfig();
+            config.setValue(request.getReminderCustomValue());
+            config.setUnit(request.getReminderCustomUnit());
+            reminder.setCustom(config);
+        }
         draft.setReminder(reminder);
 
         return draft;
@@ -130,6 +144,45 @@ public class AssistantChatService {
         if (StringUtils.hasText(pending.updateValue().notes())) {
             draft.setNotes(pending.updateValue().notes().trim());
         }
+
+        boolean hasReminder = StringUtils.hasText(pending.updateValue().reminderPreset())
+                || pending.updateValue().reminderEnabled() != null
+                || pending.updateValue().reminderCustomValue() != null;
+        if (hasReminder) {
+            ReminderRule reminder = new ReminderRule();
+            if (pending.updateValue().reminderEnabled() != null) {
+                reminder.setEnabled(pending.updateValue().reminderEnabled());
+            }
+            if (StringUtils.hasText(pending.updateValue().reminderPreset())) {
+                reminder.setPreset(pending.updateValue().reminderPreset().trim());
+            }
+            if (pending.updateValue().reminderCustomValue() != null) {
+                CustomReminderConfig config = new CustomReminderConfig();
+                config.setValue(pending.updateValue().reminderCustomValue());
+                config.setUnit(pending.updateValue().reminderCustomUnit());
+                reminder.setCustom(config);
+                reminder.setPreset("custom");
+            }
+            draft.setReminder(reminder);
+        }
+
+        boolean hasRepeat = StringUtils.hasText(pending.updateValue().repeatPreset())
+                || pending.updateValue().repeatCustomValue() != null;
+        if (hasRepeat) {
+            RepeatRule repeat = new RepeatRule();
+            if (StringUtils.hasText(pending.updateValue().repeatPreset())) {
+                repeat.setPreset(pending.updateValue().repeatPreset().trim());
+            }
+            if (pending.updateValue().repeatCustomValue() != null) {
+                CustomRepeatConfig config = new CustomRepeatConfig();
+                config.setInterval(pending.updateValue().repeatCustomValue());
+                config.setFrequency(pending.updateValue().repeatCustomUnit());
+                repeat.setCustom(config);
+                repeat.setPreset("custom");
+            }
+            draft.setRepeat(repeat);
+        }
+
         return draft;
     }
 

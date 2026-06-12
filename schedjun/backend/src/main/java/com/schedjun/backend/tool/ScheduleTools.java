@@ -38,8 +38,13 @@ public class ScheduleTools {
             String startTime,
             String endTime,
             String notes,
-            String repeatJson,
-            String reminderJson,
+            String repeatPreset,
+            Integer repeatCustomValue,
+            String repeatCustomUnit,
+            String reminderPreset,
+            Boolean reminderEnabled,
+            Integer reminderCustomValue,
+            String reminderCustomUnit,
             String source
     ) {}
 
@@ -49,8 +54,11 @@ public class ScheduleTools {
     @Tool(description = "创建一个新的日程安排。当用户想要创建、添加、安排一个新日程时调用此工具。"
             + "时间必须是 ISO-8601 格式带时区偏移（例如 2026-06-10T15:00:00+08:00）。"
             + "如果用户没有指定结束时间，默认设为开始时间后 1 小时。"
-            + "repeatPreset 可选值：never / daily / weekly / monthly / yearly，默认 never。"
-            + "reminderPreset 可选值：atStart / min5 / min15 / min30 / hour1，默认 atStart。")
+            + "repeatPreset：never/daily/weekly/monthly/yearly/custom，默认 never。"
+            + "自定义重复：repeatPreset=custom, repeatCustomValue=数值, repeatCustomUnit=day/week/month/year。"
+            + "reminderPreset：atStart/min5/min15/min30/hour1/custom/none，默认 atStart。"
+            + "自定义提醒：reminderPreset=custom, reminderCustomValue=数值, reminderCustomUnit=minute/hour/day。"
+            + "reminderEnabled 默认为 true。")
     public String createSchedule(CreateScheduleToolRequest request) {
         log.info("Tool [createSchedule] 被调用，等待用户确认: {}", request);
         PENDING_REQUEST.set(request);
@@ -163,12 +171,13 @@ public class ScheduleTools {
         return msg;
     }
 
-    @Tool(description = "根据条件更新日程。"
-            + "参数 condition：用于定位要更新的日程，非空字段作为等值匹配条件（AND 关系）。"
-            + "参数 updateValue：要更新的新值，只更新其中非 null 的字段。"
-            + "id 按数字传入（不用 sch_ 前缀）。"
-            + "条件不能为空（所有字段为 null），更新值也不能为空（至少有一个非 null 字段）。"
-            + "此工具会更新所有匹配条件的日程，请 AI 确保用户意图明确。")
+    @Tool(description = "根据条件更新日程。condition 定位要更新的日程，updateValue 是要更新的新值（只更新非 null 字段）。"
+            + "id 按数字传入。条件不能全空，更新值也不能全空。"
+            + "提醒：reminderEnabled 布尔值，reminderPreset 可选 atStart/min5/min15/min30/hour1/custom/none。"
+            + "自定义提醒：reminderPreset=custom, reminderCustomValue=数值, reminderCustomUnit=minute/hour/day。"
+            + "取消提醒：reminderEnabled=false 或 reminderPreset=none。"
+            + "重复：repeatPreset 可选 never/daily/weekly/monthly/yearly/custom。"
+            + "自定义重复：repeatPreset=custom, repeatCustomValue=数值, repeatCustomUnit=day/week/month/year。")
     public String updateSchedule(UpdateScheduleRequest condition, UpdateScheduleRequest updateValue) {
         Long userId = BaseContext.getCurrentId();
         if (userId == null) {
@@ -199,8 +208,13 @@ public class ScheduleTools {
                 && !StringUtils.hasText(r.startTime())
                 && !StringUtils.hasText(r.endTime())
                 && !StringUtils.hasText(r.notes())
-                && !StringUtils.hasText(r.repeatJson())
-                && !StringUtils.hasText(r.reminderJson())
+                && !StringUtils.hasText(r.repeatPreset())
+                && r.repeatCustomValue() == null
+                && !StringUtils.hasText(r.repeatCustomUnit())
+                && !StringUtils.hasText(r.reminderPreset())
+                && r.reminderEnabled() == null
+                && r.reminderCustomValue() == null
+                && !StringUtils.hasText(r.reminderCustomUnit())
                 && !StringUtils.hasText(r.source());
     }
 
