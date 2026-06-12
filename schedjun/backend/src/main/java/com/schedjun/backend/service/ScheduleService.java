@@ -115,6 +115,43 @@ public class ScheduleService {
     }
 
     @Transactional
+    public ScheduleVO partialUpdate(CreateScheduleDTO dto) {
+        Long userId = BaseContext.getCurrentId();
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录");
+        }
+
+        Long scheduleId = parseScheduleId(dto.getId());
+        Schedule schedule = requireOwnedSchedule(userId, scheduleId);
+        User user = userMapper.selectById(userId);
+        ZoneId zoneId = ZoneId.of(resolveTimezone(user));
+
+        if (StringUtils.hasText(dto.getTitle())) {
+            schedule.setTitle(dto.getTitle().trim());
+        }
+        if (dto.getStartTime() != null) {
+            schedule.setStartTime(toLocalDateTime(dto.getStartTime(), zoneId));
+        }
+        if (dto.getEndTime() != null) {
+            schedule.setEndTime(toLocalDateTime(dto.getEndTime(), zoneId));
+        }
+        if (StringUtils.hasText(dto.getNotes())) {
+            schedule.setNotes(dto.getNotes().trim());
+        }
+        if (dto.getRepeat() != null) {
+            schedule.setRepeatJson(toJson(normalizeRepeat(dto.getRepeat())));
+        }
+        if (dto.getReminder() != null) {
+            schedule.setReminderJson(toJson(normalizeReminder(dto.getReminder())));
+        }
+
+        schedule.setUpdatedAt(LocalDateTime.now());
+        scheduleMapper.updateById(schedule);
+
+        return toScheduleVO(schedule, resolveTimezone(user));
+    }
+
+    @Transactional
     public ScheduleDeleteVO delete(List<String> scheduleIdParams) {
         Long userId = BaseContext.getCurrentId();
         if (userId == null) {
